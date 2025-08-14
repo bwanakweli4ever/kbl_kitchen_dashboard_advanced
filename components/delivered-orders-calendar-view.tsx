@@ -211,7 +211,10 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
     return stats
   }, [orders])
 
-  const getSpiceLevel = (level: string) => {
+  const getSpiceLevel = (level: string | null) => {
+    if (!level) {
+      return { color: "bg-gray-100 text-gray-800", label: "Not specified" }
+    }
     switch (level.toLowerCase()) {
       case "mild":
         return { color: "bg-green-100 text-green-800", label: "Mild" }
@@ -248,8 +251,8 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
       order.quantity,
       order.food_total,
       order.spice_level,
-      order.sauce.replace("-", " "),
-      order.ingredients.join("; "),
+      (order.sauce || "").replace("-", " "),
+      (order.ingredients || []).join("; "),
       order.delivery_info || "",
       formatDateShort(order.created_at),
       formatDateShort(order.updated_at),
@@ -563,7 +566,7 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                             <div className="font-medium">
                               {order.size} × {order.quantity}
                             </div>
-                            <div className="text-sm text-gray-500">{order.ingredients.length} ingredients</div>
+                            <div className="text-sm text-gray-500">{(order.ingredients || []).length} ingredients</div>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -575,7 +578,7 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                         <TableCell>
                           <div className="space-y-1">
                             <Badge className={cn("text-xs", spiceLevel.color)}>{spiceLevel.label}</Badge>
-                            <div className="text-xs text-gray-500">{order.sauce.replace("-", " ")}</div>
+                            <div className="text-xs text-gray-500">{(order.sauce || "").replace("-", " ")}</div>
                           </div>
                         </TableCell>
                       </TableRow>
