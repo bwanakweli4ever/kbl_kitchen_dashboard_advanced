@@ -30,7 +30,9 @@ import {
   BarChart3,
   Users,
   MessageSquare,
-  Package
+  Package,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { MessagesView } from "../components/messages-view";
 import { OrderStatusDialog } from "../components/order-status-dialog";
@@ -73,6 +75,7 @@ export default function KitchenDashboard() {
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [showMultipleItems, setShowMultipleItems] = useState<Set<number>>(new Set());
   const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
+  const [scrollPosition, setScrollPosition] = useState(0);
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -359,6 +362,14 @@ export default function KitchenDashboard() {
     });
   };
 
+  const scrollLeft = () => {
+    setScrollPosition(prev => Math.max(0, prev - 5));
+  };
+
+  const scrollRight = () => {
+    setScrollPosition(prev => Math.min(orders.length - 5, prev + 5));
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 flex items-center justify-center p-4">
@@ -481,14 +492,49 @@ export default function KitchenDashboard() {
             </div>
           ) : (
             <div className="relative">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 px-2 md:px-1">
-                {orders.map((order) => {
+              {/* Navigation Arrows */}
+              <div className="flex items-center justify-between mb-4">
+                <Button
+                  onClick={scrollLeft}
+                  disabled={scrollPosition === 0}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 bg-white/80 backdrop-blur-sm hover:bg-white shadow-lg"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">Previous 5</span>
+                </Button>
+                
+                <div className="text-sm text-gray-600">
+                  {scrollPosition + 1}-{Math.min(scrollPosition + 5, orders.length)} of {orders.length} orders
+                </div>
+                
+                <Button
+                  onClick={scrollRight}
+                  disabled={scrollPosition === orders.length - 5}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 bg-white/80 backdrop-blur-sm hover:bg-white shadow-lg"
+                >
+                  <span className="hidden sm:inline">Next 5</span>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Single Row Display - Show 5 Orders */}
+              <div className="flex gap-4 md:gap-6 px-2 md:px-1 overflow-x-auto scrollbar-hide">
+                {orders.slice(scrollPosition, scrollPosition + 5).map((order, index) => {
                   const spiceLevel = getSpiceLevel(order.spice_level);
+                  const animationDelay = index * 0.1; // Stagger the animations
 
                   return (
                     <Card
                       key={order.id}
-                      className="w-full shadow-xl hover:shadow-2xl transition-all duration-300 border-2 border-gray-100 hover:border-green-300 bg-gradient-to-br from-white to-gray-50 relative animate-in fade-in-0 duration-300 rounded-xl overflow-hidden"
+                      className="w-full max-w-md flex-shrink-0 shadow-xl hover:shadow-2xl transition-all duration-500 border-2 border-gray-100 hover:border-green-300 bg-gradient-to-br from-white to-gray-50 relative rounded-xl overflow-hidden transform translate-x-0 animate-in slide-in-from-right-8 duration-700 ease-out hover:translate-x-1 hover:scale-105"
+                      style={{
+                        animationDelay: `${animationDelay}s`,
+                        animationFillMode: 'both'
+                      }}
                     >
                       {/* Close Button */}
                       <button
