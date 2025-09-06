@@ -37,7 +37,7 @@ import {
 import { MessagesView } from "../components/messages-view";
 import { OrderStatusDialog } from "../components/order-status-dialog";
 import { CustomersTableView } from "../components/customers-table-view";
-import { DeliveredOrdersCalendarView } from "../components/delivered-orders-calendar-view";
+import { DeliveredOrdersCalendarView as CompletedOrdersCalendarView } from "../components/delivered-orders-calendar-view";
 import { OrdersChart } from "../components/orders-chart";
 import { useNotifications } from "../hooks/use-notifications";
 import { useRealTimeOrders } from "../hooks/use-real-time-orders";
@@ -108,19 +108,21 @@ export default function KitchenDashboard() {
   });
 
   // Real-time orders hook
-  const {
-    orders,
-    loading: ordersLoading,
-    lastFetch,
-    isPolling
-  } = useRealTimeOrders({
+  const { orders, loading: ordersLoading, lastFetch, isPolling, refreshOrders } = useRealTimeOrders({
     token,
-    isActive: isAuthenticated && activeTab === "orders",
+    isActive: true,
     onNewOrder: useCallback((order: Order) => {
+      console.log("🎉 New order received:", order.id);
       notificationSystem.triggerNewOrderNotification(1);
     }, [notificationSystem]),
     onOrderUpdate: useCallback(() => {}, [])
   });
+
+  // Refresh orders after status update
+  const handleOrderStatusUpdated = useCallback(async () => {
+    console.log("🔄 Refreshing orders after status update...")
+    await refreshOrders()
+  }, [refreshOrders])
 
   // Check for saved token on mount
   useEffect(() => {
@@ -132,12 +134,24 @@ export default function KitchenDashboard() {
     setLoading(false);
   }, []);
 
-  // Handle token expiration and invalid tokens
+  // Define handleLogout early so it can be used in useEffect
+  const handleLogout = () => {
+    localStorage.removeItem("kitchen_token");
+    setToken(null);
+    setIsAuthenticated(false);
+    setApiKey("");
+    setUpdatingOrders(new Set());
+    setExpandedOrders(new Set());
+    setShowMultipleItems(new Set());
+    notificationSystem.markAllAsRead();
+  };
+
+  // Validate token immediately when component mounts and periodically
   useEffect(() => {
     if (token && isAuthenticated) {
       const validateToken = async () => {
         try {
-          const response = await fetch("/api/orders?limit=1", {
+          const response = await fetch("/api/test-connection", {
             headers: {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
@@ -150,11 +164,15 @@ export default function KitchenDashboard() {
           }
         } catch (error) {
           console.error("Token validation error:", error);
+          handleLogout();
         }
       };
       
-      const interval = setInterval(validateToken, 5 * 60 * 1000);
+      // Initial validation
       validateToken();
+      
+      // Set up periodic validation every 5 minutes
+      const interval = setInterval(validateToken, 5 * 60 * 1000);
       return () => clearInterval(interval);
     }
   }, [token, isAuthenticated]);
@@ -219,12 +237,16 @@ export default function KitchenDashboard() {
         successElement.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
         successElement.textContent = `✅ Order #${orderId} updated to ${status}`;
         document.body.appendChild(successElement);
-        
+
+        // Remove success message after 3 seconds
         setTimeout(() => {
-          if (successElement.parentNode) {
-            successElement.parentNode.removeChild(successElement);
+          if (document.body.contains(successElement)) {
+            document.body.removeChild(successElement);
           }
         }, 3000);
+
+        // Refresh orders to immediately remove delivered/cancelled orders
+        await handleOrderStatusUpdated();
       } else if (response.status === 401) {
         const errorElement = document.createElement('div');
         errorElement.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
@@ -232,8 +254,8 @@ export default function KitchenDashboard() {
         document.body.appendChild(errorElement);
         
         setTimeout(() => {
-          if (errorElement.parentNode) {
-            errorElement.parentNode.removeChild(errorElement);
+          if (document.body.contains(errorElement)) {
+            document.body.removeChild(errorElement);
           }
         }, 3000);
         
@@ -246,8 +268,8 @@ export default function KitchenDashboard() {
       document.body.appendChild(errorElement);
       
       setTimeout(() => {
-        if (errorElement.parentNode) {
-          errorElement.parentNode.removeChild(errorElement);
+        if (document.body.contains(errorElement)) {
+          document.body.removeChild(errorElement);
         }
       }, 3000);
     } finally {
@@ -281,10 +303,13 @@ export default function KitchenDashboard() {
         document.body.appendChild(successElement);
         
         setTimeout(() => {
-          if (successElement.parentNode) {
-            successElement.parentNode.removeChild(successElement);
+          if (document.body.contains(successElement)) {
+            document.body.removeChild(successElement);
           }
         }, 3000);
+
+        // Refresh orders to immediately remove delivered order
+        await handleOrderStatusUpdated();
       } else if (response.status === 401) {
         const errorElement = document.createElement('div');
         errorElement.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
@@ -292,8 +317,8 @@ export default function KitchenDashboard() {
         document.body.appendChild(errorElement);
         
         setTimeout(() => {
-          if (errorElement.parentNode) {
-            errorElement.parentNode.removeChild(errorElement);
+          if (document.body.contains(errorElement)) {
+            document.body.removeChild(errorElement);
           }
         }, 3000);
         
@@ -306,8 +331,8 @@ export default function KitchenDashboard() {
       document.body.appendChild(errorElement);
       
       setTimeout(() => {
-        if (errorElement.parentNode) {
-          errorElement.parentNode.removeChild(errorElement);
+        if (document.body.contains(errorElement)) {
+          document.body.removeChild(errorElement);
         }
       }, 3000);
     } finally {
@@ -337,17 +362,6 @@ export default function KitchenDashboard() {
       default:
         return { color: "bg-gray-100 text-gray-800", icon: <Droplets className="h-3 w-3" />, label: level };
     }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("kitchen_token");
-    setToken(null);
-    setIsAuthenticated(false);
-    setApiKey("");
-    setUpdatingOrders(new Set());
-    setExpandedOrders(new Set());
-    setShowMultipleItems(new Set());
-    notificationSystem.markAllAsRead();
   };
 
   const toggleMultipleItems = (orderId: number) => {
@@ -469,9 +483,9 @@ export default function KitchenDashboard() {
             <BarChart3 className="h-3 w-3 md:h-4 md:w-4" />
             <span className="hidden sm:inline">Analytics</span>
           </TabsTrigger>
-          <TabsTrigger value="delivered" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+          <TabsTrigger value="completed" className="flex items-center gap-2 text-xs md:text-sm">
             <Package className="h-3 w-3 md:h-4 md:w-4" />
-            <span className="hidden sm:inline">Delivered</span>
+            <span className="hidden sm:inline">Completed</span>
           </TabsTrigger>
         </TabsList>
 
@@ -768,7 +782,7 @@ export default function KitchenDashboard() {
                               customerName={order.profile_name}
                               phoneNumber={order.wa_id}
                               token={token}
-                              onStatusUpdated={() => {}}
+                              onStatusUpdated={handleOrderStatusUpdated}
                             />
 
                             {order.status.toLowerCase() === "received" && (
@@ -841,9 +855,9 @@ export default function KitchenDashboard() {
           <OrdersChart token={token} />
         </TabsContent>
 
-        {/* Delivered Orders Tab */}
-        <TabsContent value="delivered">
-          <DeliveredOrdersCalendarView token={token} />
+        {/* Completed Orders Tab */}
+        <TabsContent value="completed">
+          <CompletedOrdersCalendarView token={token} />
         </TabsContent>
       </Tabs>
     </div>

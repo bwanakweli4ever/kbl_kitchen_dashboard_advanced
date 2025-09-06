@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { config } from "@/lib/config"
 
-const API_BASE_URL = process.env.WHATSAPP_API_URL || "http://backend.kblbites.com"
-
-export async function PUT(request: NextRequest, { params }: { params: { orderId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   try {
     const authorization = request.headers.get("authorization")
 
@@ -21,11 +20,12 @@ export async function PUT(request: NextRequest, { params }: { params: { orderId:
       ...(custom_message && { custom_message }),
     }
 
-    const orderId = params.orderId
+    // Await params for Next.js 15 compatibility
+    const { orderId } = await params
 
     console.log(`Updating order ${orderId} to status: ${status}`)
 
-    const response = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
+    const response = await fetch(`${config.api.baseUrl}/orders/${orderId}/status`, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -46,6 +46,18 @@ export async function PUT(request: NextRequest, { params }: { params: { orderId:
       }
       return NextResponse.json(data)
     } else {
+      // Handle specific authentication errors
+      if (response.status === 403) {
+        console.error("Authentication failed for order status update:", responseText)
+        return NextResponse.json(
+          {
+            error: "Authentication failed",
+            details: "Token may be expired or invalid. Please login again.",
+          },
+          { status: 401 }
+        )
+      }
+      
       return NextResponse.json(
         {
           error: "Failed to update order status",

@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Package,
   Download,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -39,11 +40,11 @@ interface Order {
   updated_at: string
 }
 
-interface DeliveredOrdersCalendarViewProps {
+interface CompletedOrdersCalendarViewProps {
   token: string | null
 }
 
-export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarViewProps) {
+export function DeliveredOrdersCalendarView({ token }: CompletedOrdersCalendarViewProps) {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +60,7 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(20)
 
-  const fetchDeliveredOrders = async () => {
+  const fetchCompletedOrders = async () => {
     try {
       setLoading(true)
       if (!token) {
@@ -78,21 +79,23 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
       const data = await response.json()
 
       if (response.ok) {
-        // Filter for delivered orders only
-        const deliveredOrders = (data.orders || []).filter((order: Order) => order.status.toLowerCase() === "delivered")
+        // Filter for completed orders (delivered and cancelled)
+        const completedOrders = (data.orders || []).filter((order: Order) => 
+          ['delivered', 'cancelled'].includes(order.status.toLowerCase())
+        )
 
         // Sort by updated_at (most recent first)
-        deliveredOrders.sort(
+        completedOrders.sort(
           (a: Order, b: Order) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
         )
 
-        setOrders(deliveredOrders)
+        setOrders(completedOrders)
         setError(null)
       } else {
-        setError(data.error || "Failed to fetch delivered orders")
+        setError(data.error || "Failed to fetch completed orders")
       }
     } catch (err) {
-      console.error("Fetch delivered orders error:", err)
+      console.error("Fetch completed orders error:", err)
       setError("Network error - check your connection")
     } finally {
       setLoading(false)
@@ -101,7 +104,7 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
 
   useEffect(() => {
     if (token) {
-      fetchDeliveredOrders()
+      fetchCompletedOrders()
     }
   }, [token])
 
@@ -199,14 +202,21 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
 
   // Calculate daily stats
   const dailyStats = useMemo(() => {
-    const stats: Record<string, { count: number; revenue: number }> = {}
+    const stats: Record<string, { count: number; revenue: number; delivered: number; cancelled: number }> = {}
     orders.forEach((order) => {
       const dateKey = new Date(order.updated_at).toDateString()
       if (!stats[dateKey]) {
-        stats[dateKey] = { count: 0, revenue: 0 }
+        stats[dateKey] = { count: 0, revenue: 0, delivered: 0, cancelled: 0 }
       }
       stats[dateKey].count++
-      stats[dateKey].revenue += order.food_total
+      
+      // Only count revenue for delivered orders
+      if (order.status.toLowerCase() === 'delivered') {
+        stats[dateKey].revenue += order.food_total
+        stats[dateKey].delivered++
+      } else if (order.status.toLowerCase() === 'cancelled') {
+        stats[dateKey].cancelled++
+      }
     })
     return stats
   }, [orders])
@@ -285,26 +295,34 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-green-600">📦 Delivered Orders</h2>
-          <p className="text-gray-600">{orders.length} completed deliveries</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => exportToCSV(orders, `all_delivered_orders_${new Date().toISOString().split("T")[0]}.csv`)}
-            variant="outline"
-            className="flex items-center gap-2 bg-transparent"
-          >
-            <Download className="h-4 w-4" />
-            Export All
-          </Button>
-          <Button onClick={fetchDeliveredOrders} variant="outline" className="flex items-center gap-2 bg-transparent">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-2xl font-bold text-gray-900 mb-2">
+                Completed Orders History
+              </CardTitle>
+              <p className="text-gray-600">
+                View and manage delivered and cancelled orders with calendar and table views
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="flex items-center gap-1">
+                <Package className="h-3 w-3" />
+                {orders.length} orders
+              </Badge>
+              <Button onClick={() => exportToCSV(orders, `all_completed_orders_${new Date().toISOString().split("T")[0]}.csv`)} variant="outline" className="flex items-center gap-2">
+                <Download className="h-4 w-4" />
+                Export All
+              </Button>
+              <Button onClick={fetchCompletedOrders} variant="outline" className="flex items-center gap-2 bg-transparent">
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
       {/* View Toggle */}
       <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "calendar" | "table")}>
@@ -333,15 +351,24 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                   selected={selectedDate}
                   onSelect={(date) => date && setSelectedDate(date)}
                   modifiers={{
-                    hasOrders: (date) => {
+                    hasDeliveredOrders: (date) => {
                       const dateKey = date.toDateString()
-                      return !!ordersByDate[dateKey]
+                      return ordersByDate[dateKey]?.some(order => order.status.toLowerCase() === 'delivered')
+                    },
+                    hasCancelledOrders: (date) => {
+                      const dateKey = date.toDateString()
+                      return ordersByDate[dateKey]?.some(order => order.status.toLowerCase() === 'cancelled')
                     },
                   }}
                   modifiersStyles={{
-                    hasOrders: {
+                    hasDeliveredOrders: {
                       backgroundColor: "#dcfce7",
                       color: "#166534",
+                      fontWeight: "bold",
+                    },
+                    hasCancelledOrders: {
+                      backgroundColor: "#fef2f2",
+                      color: "#dc2626",
                       fontWeight: "bold",
                     },
                   }}
@@ -351,6 +378,10 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-3 h-3 bg-green-100 border border-green-300 rounded"></div>
                     <span>Days with deliveries</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
+                    <span>Days with cancelled orders</span>
                   </div>
                   <div>
                     Selected: <strong>{selectedDate.toLocaleDateString()}</strong>
@@ -385,8 +416,18 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                   </div>
                 </div>
                 {dailyStats[selectedDate.toDateString()] && (
-                  <div className="text-sm text-gray-600">
-                    Total Revenue: <strong>{formatCurrency(dailyStats[selectedDate.toDateString()].revenue)}</strong>
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <div>
+                      Total Revenue: <strong>{formatCurrency(dailyStats[selectedDate.toDateString()].revenue)}</strong>
+                    </div>
+                    <div className="flex gap-4 text-xs">
+                      <span className="text-green-600">
+                        Delivered: {dailyStats[selectedDate.toDateString()].delivered}
+                      </span>
+                      <span className="text-red-600">
+                        Cancelled: {dailyStats[selectedDate.toDateString()].cancelled}
+                      </span>
+                    </div>
                   </div>
                 )}
               </CardHeader>
@@ -400,17 +441,35 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {selectedDateOrders.map((order) => {
                       const spiceLevel = getSpiceLevel(order.spice_level)
+                      const isDelivered = order.status.toLowerCase() === 'delivered'
+                      const isCancelled = order.status.toLowerCase() === 'cancelled'
+                      
                       return (
-                        <div key={order.id} className="border rounded-lg p-3 bg-gray-50">
+                        <div key={order.id} className={`border rounded-lg p-3 ${
+                          isDelivered ? 'bg-green-50 border-green-200' : 
+                          isCancelled ? 'bg-red-50 border-red-200' : 'bg-gray-50'
+                        }`}>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
                               <span className="font-medium">Order #{order.id}</span>
-                              <Badge className="bg-green-500 text-white">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Delivered
-                              </Badge>
+                              {isDelivered ? (
+                                <Badge className="bg-green-500 text-white">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Delivered
+                                </Badge>
+                              ) : isCancelled ? (
+                                <Badge className="bg-red-500 text-white">
+                                  <X className="h-3 w-3 mr-1" />
+                                  Cancelled
+                                </Badge>
+                              ) : null}
                             </div>
-                            <span className="font-bold text-green-600">{formatCurrency(order.food_total)}</span>
+                            <span className={`font-bold ${
+                              isDelivered ? 'text-green-600' : 
+                              isCancelled ? 'text-red-600' : 'text-gray-600'
+                            }`}>
+                              {isCancelled ? 'N/A' : formatCurrency(order.food_total)}
+                            </span>
                           </div>
                           <div className="grid grid-cols-2 gap-2 text-sm">
                             <div>
@@ -420,7 +479,9 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                               <span className="text-gray-600">Size:</span> {order.size} × {order.quantity}
                             </div>
                             <div>
-                              <span className="text-gray-600">Delivered:</span> {formatDate(order.updated_at)}
+                              <span className="text-gray-600">
+                                {isDelivered ? 'Delivered:' : isCancelled ? 'Cancelled:' : 'Updated:'}
+                              </span> {formatDate(order.updated_at)}
                             </div>
                             <div className="flex items-center gap-1">
                               <span className="text-gray-600">Spice:</span>
@@ -461,7 +522,7 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                     onClick={() =>
                       exportToCSV(
                         filteredAndSortedOrders,
-                        `filtered_delivered_orders_${new Date().toISOString().split("T")[0]}.csv`,
+                        `filtered_completed_orders_${new Date().toISOString().split("T")[0]}.csv`,
                       )
                     }
                     variant="outline"
@@ -534,22 +595,32 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                     <TableHead>Customer</TableHead>
                     <TableHead>Items</TableHead>
                     <TableHead>Amount</TableHead>
-                    <TableHead>Delivered</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedOrders.map((order) => {
                     const spiceLevel = getSpiceLevel(order.spice_level)
+                    const isDelivered = order.status.toLowerCase() === 'delivered'
+                    const isCancelled = order.status.toLowerCase() === 'cancelled'
+                    
                     return (
                       <TableRow key={order.id}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <span className="font-medium">#{order.id}</span>
-                            <Badge className="bg-green-500 text-white">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Delivered
-                            </Badge>
+                            {isDelivered ? (
+                              <Badge className="bg-green-500 text-white">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Delivered
+                              </Badge>
+                            ) : isCancelled ? (
+                              <Badge className="bg-red-500 text-white">
+                                <X className="h-3 w-3 mr-1" />
+                                Cancelled
+                              </Badge>
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -570,7 +641,12 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="font-bold text-green-600">{formatCurrency(order.food_total)}</div>
+                          <div className={`font-bold ${
+                            isDelivered ? 'text-green-600' : 
+                            isCancelled ? 'text-red-600' : 'text-gray-600'
+                          }`}>
+                            {isCancelled ? 'N/A' : formatCurrency(order.food_total)}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">{formatDate(order.updated_at)}</div>
@@ -590,9 +666,9 @@ export function DeliveredOrdersCalendarView({ token }: DeliveredOrdersCalendarVi
               {paginatedOrders.length === 0 && !loading && (
                 <div className="text-center py-12">
                   <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-xl font-semibold text-gray-600 mb-2">No delivered orders found</h3>
+                  <h3 className="text-xl font-semibold text-gray-600 mb-2">No completed orders found</h3>
                   <p className="text-gray-500">
-                    {searchTerm ? "Try adjusting your search terms" : "Delivered orders will appear here"}
+                    {searchTerm ? "Try adjusting your search terms" : "Completed orders (delivered/cancelled) will appear here"}
                   </p>
                 </div>
               )}

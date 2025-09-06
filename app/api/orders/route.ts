@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { config } from "@/lib/config"
 
+// Force Node.js runtime to allow setInterval and other Node APIs
+export const runtime = "nodejs"
+
 // Very generous rate limiting for kitchen display
 const requestTracker = new Map<string, { count: number; firstRequest: number }>()
 const RATE_LIMIT_WINDOW = 300000 // 5 minutes
@@ -46,10 +49,18 @@ export async function GET(request: NextRequest) {
       requestTracker.set(clientId, { count: 1, firstRequest: now })
     }
 
-    const url = new URL(request.url)
-    const limit = url.searchParams.get("limit") || config.dashboard.maxOrders.toString()
-    const offset = url.searchParams.get("offset") || "0"
-    const status = url.searchParams.get("status")
+    // Robust URL parsing for both Node and Edge compatibility
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(request.url)
+    } catch {
+      // @ts-ignore - NextRequest has nextUrl in some runtimes
+      parsedUrl = (request as any).nextUrl as URL
+    }
+
+    const limit = parsedUrl.searchParams.get("limit") || config.dashboard.maxOrders.toString()
+    const offset = parsedUrl.searchParams.get("offset") || "0"
+    const status = parsedUrl.searchParams.get("status")
 
     let apiUrl = `${config.api.baseUrl}/orders?limit=${limit}&offset=${offset}`
     if (status) {
