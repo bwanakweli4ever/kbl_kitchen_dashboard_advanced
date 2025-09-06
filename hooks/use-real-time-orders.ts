@@ -85,12 +85,10 @@ export function useRealTimeOrders({
   // Simple fetch function with smooth updates
   const fetchOrders = useCallback(async () => {
     if (!token || !isActive) {
-      console.log("🚫 Fetch blocked:", { hasToken: !!token, isActive })
       return
     }
 
     try {
-      console.log("🔄 Fetching orders...")
       // Show loading for all fetches
       setLoading(true)
 
@@ -101,34 +99,26 @@ export function useRealTimeOrders({
         },
       })
 
-      console.log("📡 API response status:", response.status)
-
       if (response.ok) {
         const data = await response.json()
-        console.log("📦 Raw API response:", data)
 
         // Handle the correct API response format
         let ordersArray = []
         if (data.orders && Array.isArray(data.orders)) {
           ordersArray = data.orders
-          console.log("✅ Found orders in data.orders:", ordersArray.length)
         } else if (Array.isArray(data)) {
           ordersArray = data
-          console.log("✅ Found orders as direct array:", ordersArray.length)
         } else {
-          console.warn("❌ Orders data format not recognized:", data)
           setOrdersOptimized([])
           return
         }
 
         if (ordersArray.length > 0) {
-          console.log("🔍 Processing", ordersArray.length, "orders")
           // Filter for active orders and sort by completeness and creation time
           const activeOrders = ordersArray
             .filter((order: Order) => {
               const isActive = order.status && 
                 !['delivered', 'cancelled'].includes(order.status.toLowerCase())
-              console.log(`Order ${order.id} status: ${order.status} -> active: ${isActive}`)
               return isActive
             })
             .sort((a: Order, b: Order) => {
@@ -142,8 +132,6 @@ export function useRealTimeOrders({
               // Then by creation time (newest first)
               return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             })
-
-          console.log("🎯 Active orders after filtering:", activeOrders.length)
 
           // Check for new orders
           const currentOrderIds = new Set<number>(activeOrders.map((order: Order) => order.id))
@@ -171,17 +159,15 @@ export function useRealTimeOrders({
           // Use optimized setter to prevent unnecessary re-renders
           setOrdersOptimized(activeOrders)
           setLastFetch(new Date())
-          console.log("✅ Orders updated successfully")
         } else {
-          console.log("📭 No active orders found")
           setOrdersOptimized([])
         }
       } else {
-        console.error("❌ Failed to fetch orders:", response.status, response.statusText)
+        console.error("Failed to fetch orders:", response.status, response.statusText)
         setOrdersOptimized([])
       }
     } catch (err) {
-      console.error("❌ Fetch error:", err)
+      console.error("Fetch error:", err)
       // Don't clear orders on error, just keep existing ones
     } finally {
       // Always set loading to false after fetch

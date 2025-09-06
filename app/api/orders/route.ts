@@ -67,8 +67,6 @@ export async function GET(request: NextRequest) {
       apiUrl += `&status=${status}`
     }
 
-    console.log("🔄 Fetching from:", apiUrl)
-
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), config.api.timeout)
 
@@ -82,11 +80,8 @@ export async function GET(request: NextRequest) {
 
     clearTimeout(timeoutId)
 
-    console.log("📡 External API response:", response.status)
-
     if (response.ok) {
       const responseText = await response.text()
-      console.log("📦 Raw response:", responseText.substring(0, 200) + "...")
 
       let data
       try {
@@ -103,15 +98,13 @@ export async function GET(request: NextRequest) {
         total_count: data.total_count || data.count || 0,
       }
 
-      console.log("✅ Returning", responseData.orders.length, "orders")
       return NextResponse.json(responseData)
     } else {
-      console.log("❌ External API error:", response.status)
       // Return empty data instead of errors for kitchen display
       return NextResponse.json({ orders: [], count: 0, total_count: 0 })
     }
   } catch (error) {
-    console.error("❌ API route error:", error)
+    console.error("API route error:", error)
     // Always return empty data instead of errors for kitchen display
     return NextResponse.json({ orders: [], count: 0, total_count: 0 })
   }

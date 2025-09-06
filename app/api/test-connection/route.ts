@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
     const authorization = request.headers.get("authorization")
     
     if (!authorization) {
-      console.log("❌ No authorization header in test-connection")
       return NextResponse.json({ 
         success: false, 
         error: "No authorization header" 
@@ -16,14 +15,11 @@ export async function GET(request: NextRequest) {
     const token = authorization.replace("Bearer ", "")
     
     if (!token) {
-      console.log("❌ No token in authorization header")
       return NextResponse.json({ 
         success: false, 
         error: "Invalid token format" 
       }, { status: 401 })
     }
-
-    console.log("🧪 Testing token validation with:", config.api.baseUrl)
     
     // Add timeout and better error handling
     const controller = new AbortController()
@@ -41,7 +37,6 @@ export async function GET(request: NextRequest) {
       })
 
       clearTimeout(timeoutId)
-      console.log("📡 Token validation response status:", response.status)
       
       if (response.ok) {
         return NextResponse.json({
@@ -51,7 +46,6 @@ export async function GET(request: NextRequest) {
           message: "Token is valid and backend is reachable"
         })
       } else if (response.status === 401 || response.status === 403) {
-        console.log("❌ Token validation failed:", response.status)
         return NextResponse.json({
           success: false,
           status: response.status,
@@ -70,7 +64,6 @@ export async function GET(request: NextRequest) {
       clearTimeout(timeoutId)
       
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        console.error("❌ Request timeout:", config.api.timeout + "ms")
         return NextResponse.json({
           success: false,
           error: "Request timeout",
@@ -82,7 +75,7 @@ export async function GET(request: NextRequest) {
       throw fetchError // Re-throw to be caught by outer catch
     }
   } catch (error) {
-    console.error("❌ Test connection error:", error)
+    console.error("Test connection error:", error)
     
     // Check if it's a connection error
     const isConnectionError = error instanceof Error && (

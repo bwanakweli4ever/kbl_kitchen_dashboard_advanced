@@ -112,7 +112,6 @@ export default function KitchenDashboard() {
     token,
     isActive: true,
     onNewOrder: useCallback((order: Order) => {
-      console.log("🎉 New order received:", order.id);
       notificationSystem.triggerNewOrderNotification(1);
     }, [notificationSystem]),
     onOrderUpdate: useCallback(() => {}, [])
@@ -120,7 +119,6 @@ export default function KitchenDashboard() {
 
   // Refresh orders after status update
   const handleOrderStatusUpdated = useCallback(async () => {
-    console.log("🔄 Refreshing orders after status update...")
     await refreshOrders()
   }, [refreshOrders])
 
@@ -161,7 +159,6 @@ export default function KitchenDashboard() {
           const data = await response.json();
           
           if (response.status === 401) {
-            console.log("Token expired or invalid, redirecting to login");
             handleLogout();
           } else if (response.status === 503) {
             // Backend connection error - don't logout, just log
@@ -171,8 +168,6 @@ export default function KitchenDashboard() {
             console.warn("Backend timeout:", data.message);
           } else if (!response.ok) {
             console.warn("Token validation failed with status:", response.status, data.message);
-          } else {
-            console.log("Token validation successful:", data.message);
           }
         } catch (error) {
           console.error("Token validation error:", error);
