@@ -14,8 +14,15 @@ interface RealTimeIndicatorProps {
 
 export function RealTimeIndicator({ isConnected, lastUpdate, isPolling = false }: RealTimeIndicatorProps) {
   const [timeSinceUpdate, setTimeSinceUpdate] = useState<string>("")
+  const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isClient) return
+
     const updateTimer = () => {
       const now = new Date()
       const diffInSeconds = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000)
@@ -32,7 +39,7 @@ export function RealTimeIndicator({ isConnected, lastUpdate, isPolling = false }
     const interval = setInterval(updateTimer, 1000)
 
     return () => clearInterval(interval)
-  }, [lastUpdate])
+  }, [lastUpdate, isClient])
 
   // Simple, clean status for kitchen display
   const getStatusInfo = () => {
@@ -61,7 +68,7 @@ export function RealTimeIndicator({ isConnected, lastUpdate, isPolling = false }
 
       <Badge variant="outline" className="flex items-center gap-1">
         <Clock className="h-3 w-3" />
-        {timeSinceUpdate}
+        {isClient ? timeSinceUpdate : "Loading..."}
       </Badge>
     </div>
   )

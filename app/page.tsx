@@ -158,13 +158,28 @@ export default function KitchenDashboard() {
             },
           });
           
+          const data = await response.json();
+          
           if (response.status === 401) {
             console.log("Token expired or invalid, redirecting to login");
             handleLogout();
+          } else if (response.status === 503) {
+            // Backend connection error - don't logout, just log
+            console.warn("Backend connection error:", data.message);
+          } else if (response.status === 408) {
+            // Timeout error - don't logout, just log
+            console.warn("Backend timeout:", data.message);
+          } else if (!response.ok) {
+            console.warn("Token validation failed with status:", response.status, data.message);
+          } else {
+            console.log("Token validation successful:", data.message);
           }
         } catch (error) {
           console.error("Token validation error:", error);
-          handleLogout();
+          // Only logout on network errors if it's not a connection issue
+          if (error instanceof Error && !error.message.includes('fetch')) {
+            handleLogout();
+          }
         }
       };
       
@@ -175,7 +190,7 @@ export default function KitchenDashboard() {
       const interval = setInterval(validateToken, 5 * 60 * 1000);
       return () => clearInterval(interval);
     }
-  }, [token, isAuthenticated]);
+  }, [token, isAuthenticated, handleLogout]);
 
   const handleLogin = async () => {
     try {

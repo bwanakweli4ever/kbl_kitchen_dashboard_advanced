@@ -91,10 +91,8 @@ export function useRealTimeOrders({
 
     try {
       console.log("🔄 Fetching orders...")
-      // Don't show loading for subsequent fetches (smooth updates)
-      if (orders.length === 0) {
-        setLoading(true)
-      }
+      // Show loading for all fetches
+      setLoading(true)
 
       const response = await fetch(`/api/orders?limit=${config.dashboard.maxOrders}`, {
         headers: {
@@ -186,10 +184,8 @@ export function useRealTimeOrders({
       console.error("❌ Fetch error:", err)
       // Don't clear orders on error, just keep existing ones
     } finally {
-      // Only set loading to false for initial load
-      if (orders.length === 0) {
-        setLoading(false)
-      }
+      // Always set loading to false after fetch
+      setLoading(false)
     }
   }, [token, isActive, onNewOrder, onOrderUpdate, orders.length, setOrdersOptimized])
 
@@ -229,6 +225,7 @@ export function useRealTimeOrders({
   // Manual refresh
   const refreshOrders = useCallback(async () => {
     if (!token) return
+    setLoading(true) // Show loading for manual refresh
     await fetchOrders()
   }, [fetchOrders])
 
