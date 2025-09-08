@@ -468,9 +468,23 @@ export default function KitchenDashboard() {
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 flex items-center justify-center p-2 sm:p-4">
         <Card className="w-full max-w-sm sm:max-w-md">
           <CardHeader className="text-center pb-4">
-            <CardTitle className="text-xl sm:text-2xl font-bold text-green-600">
-              🍳 KBL Bites Kitchen
-            </CardTitle>
+            <div className="flex flex-col items-center gap-3 mb-4">
+              {/* KBL Bites Logo */}
+              <div className="flex items-center gap-2">
+                <img 
+                  src="/logo.png" 
+                  alt="KBL Bites Logo" 
+                  className="w-12 h-12 sm:w-14 sm:h-14 object-contain"
+                />
+                <div className="flex flex-col">
+                  <CardTitle className="text-xl sm:text-2xl font-bold text-green-600 leading-tight">
+                    <span className="text-green-600">KBL</span> <span className="text-green-600">Bites</span>
+                    <span className="text-orange-500 text-2xl sm:text-3xl ml-1">•</span>
+                  </CardTitle>
+                  <p className="text-gray-500 text-xs sm:text-sm font-medium uppercase tracking-wider">QUICK • FRESH • SATISFYING</p>
+                </div>
+              </div>
+            </div>
             <p className="text-gray-600 text-sm sm:text-base">
               Enter your API key to access orders
             </p>
@@ -487,7 +501,7 @@ export default function KitchenDashboard() {
             <Button
               onClick={handleLogin}
               disabled={loading || !apiKey}
-              className="w-full bg-green-500 hover:bg-green-600 h-10 sm:h-11 text-sm sm:text-base touch-manipulation"
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white h-10 sm:h-11 text-sm sm:text-base touch-manipulation shadow-lg hover:shadow-xl transition-all duration-200"
             >
               {loading ? "Connecting..." : "Connect to Kitchen"}
             </Button>
@@ -516,7 +530,23 @@ export default function KitchenDashboard() {
       <div className="mb-2 sm:mb-3 md:mb-4 lg:mb-6">
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 xl:gap-4">
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-green-600 mb-1 sm:mb-2 truncate">🍳 KBL Bites Kitchen Dashboard</h1>
+            <div className="flex items-center gap-3 sm:gap-4 mb-2 sm:mb-3">
+              {/* KBL Bites Logo */}
+              <div className="flex items-center gap-2 sm:gap-3">
+                <img 
+                  src="/logo.png" 
+                  alt="KBL Bites Logo" 
+                  className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 object-contain"
+                />
+                <div className="flex flex-col">
+                  <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-green-600 leading-tight">
+                    <span className="text-green-600">KBL</span> <span className="text-green-600">Bites</span>
+                    <span className="text-orange-500 text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl ml-1">•</span>
+                  </h1>
+                  <p className="text-gray-500 text-xs sm:text-sm font-medium uppercase tracking-wider">QUICK • FRESH • SATISFYING</p>
+                </div>
+              </div>
+            </div>
             <div className="flex flex-col xs:flex-row xs:items-center gap-1 xs:gap-2 sm:gap-4">
               <p className="text-gray-600 text-xs sm:text-sm md:text-base">{orders.length} active orders</p>
               <RealTimeIndicator isConnected={true} lastUpdate={lastFetch || new Date()} isPolling={isPolling} />
@@ -545,26 +575,26 @@ export default function KitchenDashboard() {
       {/* Navigation Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <div className="overflow-x-auto scrollbar-hide mb-2 sm:mb-3 md:mb-4 lg:mb-6">
-          <TabsList className="flex w-full gap-1 sm:gap-2 md:gap-3 min-w-max">
-            <TabsTrigger value="orders" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+          <TabsList className="flex w-full gap-1 sm:gap-2 md:gap-3 min-w-max h-12 sm:h-14">
+            <TabsTrigger value="orders" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Utensils className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Active Orders</span>
               <NotificationBadge count={notificationSystem.notifications.newOrders} />
             </TabsTrigger>
-            <TabsTrigger value="customers" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+            <TabsTrigger value="customers" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Users className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Customers</span>
             </TabsTrigger>
-            <TabsTrigger value="messages" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+            <TabsTrigger value="messages" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Messages</span>
               <NotificationBadge count={notificationSystem.notifications.newMessages} />
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+            <TabsTrigger value="analytics" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Analytics</span>
             </TabsTrigger>
-            <TabsTrigger value="completed" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+            <TabsTrigger value="completed" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Completed</span>
             </TabsTrigger>
@@ -1157,7 +1187,7 @@ export default function KitchenDashboard() {
                               <button
                                 onClick={() => updateOrderStatus(order.id, "preparing")}
                                 disabled={updatingOrders.has(order.id)}
-                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-lg hover:shadow-xl touch-manipulation"
+                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-lg hover:shadow-xl touch-manipulation"
                               >
                                 {updatingOrders.has(order.id) ? (
                                   <span className="animate-spin text-lg">⏳</span>
@@ -1173,7 +1203,7 @@ export default function KitchenDashboard() {
                               <button
                                 onClick={() => updateOrderStatus(order.id, "ready")}
                                 disabled={updatingOrders.has(order.id)}
-                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-lg hover:shadow-xl touch-manipulation"
+                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-lg hover:shadow-xl touch-manipulation"
                               >
                                 {updatingOrders.has(order.id) ? (
                                   <span className="animate-spin text-lg">⏳</span>
@@ -1189,15 +1219,27 @@ export default function KitchenDashboard() {
                               <button
                                 onClick={() => updateOrderStatus(order.id, "delivered")}
                                 disabled={updatingOrders.has(order.id)}
-                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-lg hover:shadow-xl touch-manipulation"
+                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 text-white hover:from-emerald-600 hover:via-green-600 hover:to-teal-600 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-xl hover:shadow-2xl touch-manipulation relative overflow-hidden group"
                               >
+                                {/* Animated background effect */}
+                                <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform -skew-x-12 -translate-x-full group-hover:translate-x-full"></div>
+                                
                                 {updatingOrders.has(order.id) ? (
-                                  <span className="animate-spin text-lg">⏳</span>
+                                  <span className="animate-spin text-lg relative z-10">⏳</span>
                                 ) : (
-                                  <span className="text-xl">🚚</span>
+                                  <span className="text-xl relative z-10">✅</span>
                                 )}
-                                <span className="hidden xs:inline">{updatingOrders.has(order.id) ? "Updating..." : "Mark Delivered"}</span>
-                                <span className="xs:hidden">{updatingOrders.has(order.id) ? "..." : "Deliver"}</span>
+                                <span className="hidden xs:inline relative z-10">{updatingOrders.has(order.id) ? "Updating..." : "Mark as Delivered"}</span>
+                                <span className="xs:hidden relative z-10">{updatingOrders.has(order.id) ? "..." : "Delivered"}</span>
+                                
+                                {/* Success checkmark animation */}
+                                {!updatingOrders.has(order.id) && (
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    <div className="w-6 h-6 border-2 border-white rounded-full flex items-center justify-center">
+                                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                                    </div>
+                                  </div>
+                                )}
                               </button>
                             )}
                           </div>
