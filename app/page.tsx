@@ -390,6 +390,64 @@ export default function KitchenDashboard() {
     }
   };
 
+  // Helper function to categorize ingredients
+  const categorizeIngredients = (ingredients: string[]) => {
+    const categories = {
+      proteins: [] as string[],
+      vegetables: [] as string[],
+      sauces: [] as string[],
+      bread: [] as string[],
+      other: [] as string[]
+    };
+
+    ingredients.forEach(ingredient => {
+      const lower = ingredient.toLowerCase();
+      
+      // Proteins
+      if (lower.includes('beef') || lower.includes('chicken') || lower.includes('pork') || 
+          lower.includes('fish') || lower.includes('meat') || lower.includes('protein') || 
+          lower.includes('cheese') || lower.includes('ham')) {
+        categories.proteins.push(ingredient);
+      } 
+      // Vegetables
+      else if (lower.includes('lettuce') || lower.includes('tomato') || lower.includes('onion') || 
+               lower.includes('avocado') || lower.includes('cucumber') || lower.includes('carrot') || 
+               lower.includes('vegetable') || lower.includes('veggie') || lower.includes('pepper') || 
+               lower.includes('olive') || lower.includes('cabbage') || lower.includes('pickle') ||
+               lower.includes('red-pepper') || lower.includes('green-pepper') || lower.includes('yellow-pepper') ||
+               lower.includes('black-olive') || lower.includes('red-onion') || lower.includes('white-onion') ||
+               lower.includes('green-onion') || lower.includes('tomatoes') || lower.includes('lettuce')) {
+        categories.vegetables.push(ingredient);
+      } 
+      // Sauces
+      else if (lower.includes('sauce') || lower.includes('mayo') || lower.includes('ketchup') || 
+               lower.includes('mustard') || lower.includes('dressing') || lower.includes('kbl-magic')) {
+        categories.sauces.push(ingredient);
+      } 
+      // Bread/Wrap
+      else if (lower.includes('bread') || lower.includes('wrap') || lower.includes('bun') || 
+               lower.includes('sandwich') || lower.includes('fresh-wrap') || lower.includes('large-sandwich')) {
+        categories.bread.push(ingredient);
+      } 
+      // Other
+      else {
+        categories.other.push(ingredient);
+      }
+    });
+
+    return categories;
+  };
+
+  // Helper function to get bread/wrap choice
+  const getBreadChoice = (size: string) => {
+    const lower = size.toLowerCase();
+    if (lower.includes('wrap')) return `🌯 ${size}`;
+    if (lower.includes('sandwich')) return `🥪 ${size}`;
+    if (lower.includes('burger')) return `🍔 ${size}`;
+    if (lower.includes('bread')) return `🍞 ${size}`;
+    return `🍞 ${size}`;
+  };
+
   const toggleMultipleItems = (orderId: number, event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -541,7 +599,7 @@ export default function KitchenDashboard() {
               </div>
 
               {/* Responsive Grid Display */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-responsive">
+              <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
                 {orders.map((order, index) => {
                   const spiceLevel = getSpiceLevel(order.spice_level);
                   const animationDelay = index * 0.1; // Stagger the animations
@@ -549,7 +607,7 @@ export default function KitchenDashboard() {
                   return (
                     <Card
                       key={order.id}
-                      className="w-full max-w-md sm:max-w-none shadow-xl hover:shadow-2xl transition-all duration-300 border-2 border-gray-200 hover:border-green-400 bg-gradient-to-br from-white to-gray-50 relative rounded-xl overflow-hidden transform hover:scale-105 active:scale-95 touch-manipulation"
+                      className="w-full max-w-lg sm:max-w-xl md:max-w-2xl lg:max-w-none shadow-xl hover:shadow-2xl transition-all duration-300 border-2 border-gray-200 hover:border-green-400 bg-gradient-to-br from-white to-gray-50 relative rounded-xl overflow-hidden transform hover:scale-105 active:scale-95 touch-manipulation"
                       style={{
                         animationDelay: `${animationDelay}s`,
                         animationFillMode: 'both'
@@ -568,7 +626,7 @@ export default function KitchenDashboard() {
                         )}
                       </button>
 
-                      <CardHeader className="pb-4 sm:pb-5 md:pb-6 pr-10 sm:pr-12 md:pr-14 bg-gradient-to-r from-gray-50 to-white border-b-2 border-gray-200 p-4 sm:p-5 md:p-6">
+                      <CardHeader className="pb-6 sm:pb-7 md:pb-8 pr-12 sm:pr-14 md:pr-16 bg-gradient-to-r from-gray-50 to-white border-b-2 border-gray-200 p-6 sm:p-7 md:p-8">
                         <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-5">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 sm:gap-4">
@@ -620,10 +678,10 @@ export default function KitchenDashboard() {
                         </div>
                       </CardHeader>
 
-                      <CardContent className="space-y-5 p-4 sm:p-5 md:p-6">
+                      <CardContent className="space-y-6 p-6 sm:p-7 md:p-8">
                         {/* Food Item Details */}
-                        <div className="p-4 sm:p-5 space-y-4 bg-gray-50 rounded-xl">
-                          <div className="bg-white rounded-xl p-4 sm:p-5 border-2 border-gray-200 shadow-sm">
+                        <div className="p-6 sm:p-7 space-y-5 bg-gray-50 rounded-xl">
+                          <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-3">
                                 <span className="text-xl sm:text-2xl">🍽️</span>
@@ -644,70 +702,371 @@ export default function KitchenDashboard() {
                             </div>
                             
                             {/* Main Food Item */}
-                            <div className="grid grid-cols-2 gap-4 mb-3">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-gray-500 text-lg">🍞</span>
-                                  <span className="text-base sm:text-lg font-medium">{order.size}</span>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-gray-500 text-lg">🔢</span>
-                                  <span className="text-base sm:text-lg font-medium">×{order.quantity}</span>
+                            <div className="space-y-4 mb-3">
+                              {/* Bread/Wrap Choice */}
+                              <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                                <span className="text-2xl">🍞</span>
+                                <div>
+                                  <div className="font-semibold text-orange-800">{getBreadChoice(order.size)}</div>
+                                  <div className="text-sm text-orange-600">Quantity: ×{order.quantity}</div>
                                 </div>
                               </div>
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-gray-500 text-lg">🔥</span>
-                                  <span className="text-base sm:text-lg font-medium">{order.spice_level || 'Not specified'}</span>
+
+                              {/* Ingredients Categories */}
+                              {order.ingredients && order.ingredients.length > 0 && (
+                                <div className="space-y-3">
+                                  {(() => {
+                                    const categories = categorizeIngredients(order.ingredients);
+                                    return (
+                                      <>
+                                        {/* Proteins */}
+                                        {categories.proteins.length > 0 && (
+                                          <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <span className="text-lg">🥩</span>
+                                              <span className="font-semibold text-red-800">Proteins</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                              {categories.proteins.map((protein, idx) => (
+                                                <span key={idx} className="px-2 py-1 bg-red-100 text-red-700 text-sm rounded border border-red-300 capitalize">
+                                                  {protein.replace('-', ' ')}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Vegetables */}
+                                        {categories.vegetables.length > 0 && (
+                                          <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <span className="text-lg">🥬</span>
+                                              <span className="font-semibold text-green-800">Vegetables</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                              {categories.vegetables.map((veggie, idx) => (
+                                                <span key={idx} className="px-2 py-1 bg-green-100 text-green-700 text-sm rounded border border-green-300 capitalize">
+                                                  {veggie.replace('-', ' ')}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Sauces */}
+                                        {categories.sauces.length > 0 && (
+                                          <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <span className="text-lg">🥫</span>
+                                              <span className="font-semibold text-yellow-800">Sauces</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                              {categories.sauces.map((sauce, idx) => (
+                                                <span key={idx} className="px-2 py-1 bg-yellow-100 text-yellow-700 text-sm rounded border border-yellow-300 capitalize">
+                                                  {sauce.replace('-', ' ')}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Other ingredients */}
+                                        {categories.other.length > 0 && (
+                                          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <span className="text-lg">➕</span>
+                                              <span className="font-semibold text-gray-800">Other</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                              {categories.other.map((other, idx) => (
+                                                <span key={idx} className="px-2 py-1 bg-gray-100 text-gray-700 text-sm rounded border border-gray-300 capitalize">
+                                                  {other.replace('-', ' ')}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-gray-500 text-lg">🥫</span>
-                                  <span className="text-base sm:text-lg font-medium">{order.sauce || 'No sauce'}</span>
+                              )}
+
+                              {/* Spice Level */}
+                              <div className="flex items-center gap-3 p-3 bg-orange-100 rounded-lg border border-orange-300">
+                                <span className="text-2xl">🔥</span>
+                                <div>
+                                  <div className="font-semibold text-orange-800">Spice Level</div>
+                                  <div className="text-sm text-orange-600">{order.spice_level || 'Not specified'}</div>
                                 </div>
                               </div>
                             </div>
 
                             {/* Additional Items - Expandable */}
                             {(order.items || order.drinks) && showMultipleItems.has(order.id) && (
-                              <div className="border-t border-gray-200 pt-2 space-y-2">
+                              <div className="border-t border-gray-200 pt-4 space-y-3">
                                 {order.items && (
-                                  <div className="space-y-2">
+                                  <div className="space-y-3">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-gray-500 text-xs">🍽️</span>
-                                      <span className="text-xs font-medium text-gray-700">Additional Orders:</span>
+                                      <span className="text-gray-500 text-sm">🍽️</span>
+                                      <span className="text-sm font-semibold text-gray-700">Additional Orders:</span>
                                     </div>
-                                    <div className="pl-4 space-y-2">
+                                    <div className="space-y-3">
                                       {(() => {
                                         try {
                                           const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
-                                          if (Array.isArray(items)) {
-                                            return items.map((item, idx) => (
-                                              <div key={idx} className="bg-gray-50 rounded p-2 border border-gray-200">
-                                                <div className="flex items-center justify-between mb-1">
-                                                  <span className="text-xs font-medium text-gray-800">
-                                                    Order {idx + 1}: {item.size || 'Food Item'}
-                                                  </span>
-                                                  <span className="text-xs text-green-600 font-medium">
-                                                    {item.price ? `${item.price.toLocaleString()} RWF` : ''}
-                                                  </span>
-                                                </div>
-                                                <div className="text-xs text-gray-600 mb-1">
-                                                  Qty: {item.quantity || 1} • Spice: {item.spice_level || 'No spice'} • Sauce: {item.sauce || 'No sauce'}
-                                                </div>
-                                                {item.ingredients && item.ingredients.length > 0 && (
-                                                  <div className="flex flex-wrap gap-1">
-                                                    {item.ingredients.map((ingredient: string, ingIdx: number) => (
-                                                      <span
-                                                        key={ingIdx}
-                                                        className="px-1.5 py-0.5 bg-blue-50 text-xs rounded border border-blue-200 text-blue-700 capitalize"
-                                                      >
-                                                        {ingredient.replace('-', ' ')}
-                                                      </span>
-                                                    ))}
+                                          if (Array.isArray(items) && items.length > 0) {
+                                            // Check if this is a single order (items array contains only the main order)
+                                            const isSingleOrder = items.length === 1 && 
+                                                               items[0].size === order.size && 
+                                                               items[0].spice_level === order.spice_level && 
+                                                               items[0].sauce === order.sauce &&
+                                                               JSON.stringify(items[0].ingredients?.sort()) === JSON.stringify(order.ingredients?.sort());
+
+                                            if (isSingleOrder) {
+                                              // This is a single order, don't show additional items section
+                                              return null;
+                                            }
+
+                                            // Count identical items to main order (excluding the main order itself)
+                                            const identicalCount = items.filter((item: any) => {
+                                              const isIdentical = item.size === order.size && 
+                                                                item.spice_level === order.spice_level && 
+                                                                item.sauce === order.sauce &&
+                                                                JSON.stringify(item.ingredients?.sort()) === JSON.stringify(order.ingredients?.sort());
+                                              return isIdentical;
+                                            }).length;
+
+                                            // Show summary if there are identical items
+                                            if (identicalCount > 0) {
+                                              return (
+                                                <>
+                                                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                      <span className="text-lg">📋</span>
+                                                      <span className="font-semibold text-blue-800">Order Summary</span>
+                                                    </div>
+                                                    <div className="text-sm text-blue-700">
+                                                      Main order + {identicalCount} additional identical item{identicalCount > 1 ? 's' : ''}
+                                                    </div>
+                                                    <div className="text-xs text-blue-600 mt-1">
+                                                      Total quantity: {order.quantity + identicalCount} × {getBreadChoice(order.size)}
+                                                    </div>
                                                   </div>
-                                                )}
-                                              </div>
-                                            ));
+                                                  
+                                                  {items.map((item: any, idx: number) => {
+                                                    // Check if this item is significantly different from the main order
+                                                    const isDifferent = item.size !== order.size || 
+                                                                      item.spice_level !== order.spice_level || 
+                                                                      item.sauce !== order.sauce ||
+                                                                      JSON.stringify(item.ingredients?.sort()) !== JSON.stringify(order.ingredients?.sort());
+                                                    
+                                                    if (!isDifferent) {
+                                                      return null; // Skip duplicate items
+                                                    }
+
+                                                    return (
+                                                      <div key={idx} className="bg-white rounded-lg p-4 border-2 border-blue-200 shadow-sm">
+                                                        <div className="flex items-center justify-between mb-3">
+                                                          <div className="flex items-center gap-2">
+                                                            <span className="text-lg">🍽️</span>
+                                                            <span className="font-semibold text-gray-800">
+                                                              Additional Order {idx + 1}: {getBreadChoice(item.size || 'Food Item')}
+                                                            </span>
+                                                          </div>
+                                                          <span className="text-sm text-green-600 font-bold">
+                                                            {item.price ? `${item.price.toLocaleString()} RWF` : ''}
+                                                          </span>
+                                                        </div>
+                                                        
+                                                        <div className="text-sm text-gray-600 mb-3">
+                                                          Qty: {item.quantity || 1} • Spice: {item.spice_level || 'No spice'} • Sauce: {item.sauce || 'No sauce'}
+                                                        </div>
+                                                        
+                                                        {item.ingredients && item.ingredients.length > 0 && (
+                                                          <div className="space-y-2">
+                                                            {(() => {
+                                                              const categories = categorizeIngredients(item.ingredients);
+                                                              return (
+                                                                <>
+                                                                  {/* Proteins */}
+                                                                  {categories.proteins.length > 0 && (
+                                                                    <div className="p-2 bg-red-50 rounded border border-red-200">
+                                                                      <div className="flex items-center gap-1 mb-1">
+                                                                        <span className="text-sm">🥩</span>
+                                                                        <span className="text-xs font-semibold text-red-700">Proteins</span>
+                                                                      </div>
+                                                                      <div className="flex flex-wrap gap-1">
+                                                                        {categories.proteins.map((protein, ingIdx) => (
+                                                                          <span key={ingIdx} className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded border border-red-300 capitalize">
+                                                                            {protein.replace('-', ' ')}
+                                                                          </span>
+                                                                        ))}
+                                                                      </div>
+                                                                    </div>
+                                                                  )}
+
+                                                                  {/* Vegetables */}
+                                                                  {categories.vegetables.length > 0 && (
+                                                                    <div className="p-2 bg-green-50 rounded border border-green-200">
+                                                                      <div className="flex items-center gap-1 mb-1">
+                                                                        <span className="text-sm">🥬</span>
+                                                                        <span className="text-xs font-semibold text-green-700">Vegetables</span>
+                                                                      </div>
+                                                                      <div className="flex flex-wrap gap-1">
+                                                                        {categories.vegetables.map((veggie, ingIdx) => (
+                                                                          <span key={ingIdx} className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded border border-green-300 capitalize">
+                                                                            {veggie.replace('-', ' ')}
+                                                                          </span>
+                                                                        ))}
+                                                                      </div>
+                                                                    </div>
+                                                                  )}
+
+                                                                  {/* Sauces */}
+                                                                  {categories.sauces.length > 0 && (
+                                                                    <div className="p-2 bg-yellow-50 rounded border border-yellow-200">
+                                                                      <div className="flex items-center gap-1 mb-1">
+                                                                        <span className="text-sm">🥫</span>
+                                                                        <span className="text-xs font-semibold text-yellow-700">Sauces</span>
+                                                                      </div>
+                                                                      <div className="flex flex-wrap gap-1">
+                                                                        {categories.sauces.map((sauce, ingIdx) => (
+                                                                          <span key={ingIdx} className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded border border-yellow-300 capitalize">
+                                                                            {sauce.replace('-', ' ')}
+                                                                          </span>
+                                                                        ))}
+                                                                      </div>
+                                                                    </div>
+                                                                  )}
+
+                                                                  {/* Other ingredients */}
+                                                                  {categories.other.length > 0 && (
+                                                                    <div className="p-2 bg-gray-50 rounded border border-gray-200">
+                                                                      <div className="flex items-center gap-1 mb-1">
+                                                                        <span className="text-sm">➕</span>
+                                                                        <span className="text-xs font-semibold text-gray-700">Other</span>
+                                                                      </div>
+                                                                      <div className="flex flex-wrap gap-1">
+                                                                        {categories.other.map((other, ingIdx) => (
+                                                                          <span key={ingIdx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-300 capitalize">
+                                                                            {other.replace('-', ' ')}
+                                                                          </span>
+                                                                        ))}
+                                                                      </div>
+                                                                    </div>
+                                                                  )}
+                                                                </>
+                                                              );
+                                                            })()}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    );
+                                                  }).filter(Boolean)} {/* Remove null values */}
+                                                </>
+                                              );
+                                            } else {
+                                              // No identical items, show all items
+                                              return items.map((item: any, idx: number) => (
+                                                <div key={idx} className="bg-white rounded-lg p-4 border-2 border-blue-200 shadow-sm">
+                                                  <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="text-lg">🍽️</span>
+                                                      <span className="font-semibold text-gray-800">
+                                                        Additional Order {idx + 1}: {getBreadChoice(item.size || 'Food Item')}
+                                                      </span>
+                                                    </div>
+                                                    <span className="text-sm text-green-600 font-bold">
+                                                      {item.price ? `${item.price.toLocaleString()} RWF` : ''}
+                                                    </span>
+                                                  </div>
+                                                  
+                                                  <div className="text-sm text-gray-600 mb-3">
+                                                    Qty: {item.quantity || 1} • Spice: {item.spice_level || 'No spice'} • Sauce: {item.sauce || 'No sauce'}
+                                                  </div>
+                                                  
+                                                  {item.ingredients && item.ingredients.length > 0 && (
+                                                    <div className="space-y-2">
+                                                      {(() => {
+                                                        const categories = categorizeIngredients(item.ingredients);
+                                                        return (
+                                                          <>
+                                                            {/* Proteins */}
+                                                            {categories.proteins.length > 0 && (
+                                                              <div className="p-2 bg-red-50 rounded border border-red-200">
+                                                                <div className="flex items-center gap-1 mb-1">
+                                                                  <span className="text-sm">🥩</span>
+                                                                  <span className="text-xs font-semibold text-red-700">Proteins</span>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                  {categories.proteins.map((protein, ingIdx) => (
+                                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded border border-red-300 capitalize">
+                                                                      {protein.replace('-', ' ')}
+                                                                    </span>
+                                                                  ))}
+                                                                </div>
+                                                              </div>
+                                                            )}
+
+                                                            {/* Vegetables */}
+                                                            {categories.vegetables.length > 0 && (
+                                                              <div className="p-2 bg-green-50 rounded border border-green-200">
+                                                                <div className="flex items-center gap-1 mb-1">
+                                                                  <span className="text-sm">🥬</span>
+                                                                  <span className="text-xs font-semibold text-green-700">Vegetables</span>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                  {categories.vegetables.map((veggie, ingIdx) => (
+                                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded border border-green-300 capitalize">
+                                                                      {veggie.replace('-', ' ')}
+                                                                    </span>
+                                                                  ))}
+                                                                </div>
+                                                              </div>
+                                                            )}
+
+                                                            {/* Sauces */}
+                                                            {categories.sauces.length > 0 && (
+                                                              <div className="p-2 bg-yellow-50 rounded border border-yellow-200">
+                                                                <div className="flex items-center gap-1 mb-1">
+                                                                  <span className="text-sm">🥫</span>
+                                                                  <span className="text-xs font-semibold text-yellow-700">Sauces</span>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                  {categories.sauces.map((sauce, ingIdx) => (
+                                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded border border-yellow-300 capitalize">
+                                                                      {sauce.replace('-', ' ')}
+                                                                    </span>
+                                                                  ))}
+                                                                </div>
+                                                              </div>
+                                                            )}
+
+                                                            {/* Other ingredients */}
+                                                            {categories.other.length > 0 && (
+                                                              <div className="p-2 bg-gray-50 rounded border border-gray-200">
+                                                                <div className="flex items-center gap-1 mb-1">
+                                                                  <span className="text-sm">➕</span>
+                                                                  <span className="text-xs font-semibold text-gray-700">Other</span>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                  {categories.other.map((other, ingIdx) => (
+                                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-300 capitalize">
+                                                                      {other.replace('-', ' ')}
+                                                                    </span>
+                                                                  ))}
+                                                                </div>
+                                                              </div>
+                                                            )}
+                                                          </>
+                                                        );
+                                                      })()}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              ));
+                                            }
                                           }
                                           return <span className="text-xs text-gray-600">{order.items}</span>;
                                         } catch (error) {
@@ -776,7 +1135,7 @@ export default function KitchenDashboard() {
                         )}
 
                         {/* Action Buttons */}
-                        <div className="bg-gradient-to-r from-gray-50 to-white p-4 sm:p-5 rounded-xl border-2 border-gray-200 shadow-sm">
+                        <div className="bg-gradient-to-r from-gray-50 to-white p-6 sm:p-7 rounded-xl border-2 border-gray-200 shadow-sm">
                           <div className="flex items-center gap-3 mb-3">
                             <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
                               <span className="text-sm">⚡</span>
@@ -784,7 +1143,7 @@ export default function KitchenDashboard() {
                             <h4 className="font-bold text-base sm:text-lg text-gray-900">Order Actions</h4>
                           </div>
                           
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                             <OrderStatusDialog
                               orderId={order.id}
                               currentStatus={order.status}
