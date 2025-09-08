@@ -32,31 +32,74 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
 
   // Show browser notification
   const showBrowserNotification = useCallback(
-    (title: string, body: string, icon?: string) => {
-      if (hasPermission && "Notification" in window) {
-        const notification = new Notification(title, {
-          body,
-          icon: icon || "/logo.png",
-          badge: "/logo.png",
-          tag: "kitchen-notification",
-          requireInteraction: true, // Keep notification until user interacts
-          silent: false,
-          data: {
-            url: window.location.href,
-            timestamp: Date.now()
-          }
-        })
+    async (title: string, body: string, icon?: string) => {
+      if (!hasPermission) return
 
-        // Handle notification click
-        notification.onclick = () => {
-          window.focus()
-          notification.close()
+      try {
+        // Try to use service worker registration first (for PWA)
+        if ('serviceWorker' in navigator && 'Notification' in window) {
+          try {
+            const registration = await navigator.serviceWorker.ready
+            if (registration && registration.showNotification) {
+              await registration.showNotification(title, {
+                body,
+                icon: icon || "/logo.png",
+                badge: "/logo.png",
+                tag: "kitchen-notification",
+                requireInteraction: true,
+                silent: false,
+                data: {
+                  url: window.location.href,
+                  timestamp: Date.now()
+                }
+              })
+              return
+            }
+          } catch (swError) {
+            console.log("Service worker notification failed, trying direct:", swError)
+          }
         }
 
-        // Auto-close notification after 10 seconds (longer for mobile)
+        // Fallback to direct Notification constructor (only in main thread)
+        if ("Notification" in window && Notification.permission === "granted" && typeof window !== 'undefined') {
+          const notification = new Notification(title, {
+            body,
+            icon: icon || "/logo.png",
+            badge: "/logo.png",
+            tag: "kitchen-notification",
+            requireInteraction: true,
+            silent: false,
+            data: {
+              url: window.location.href,
+              timestamp: Date.now()
+            }
+          })
+
+          // Handle notification click
+          notification.onclick = () => {
+            window.focus()
+            notification.close()
+          }
+
+          // Auto-close notification after 10 seconds
+          setTimeout(() => {
+            notification.close()
+          }, 10000)
+        } else {
+          throw new Error("Notification permission not granted or not supported")
+        }
+      } catch (error) {
+        console.error("Failed to show notification:", error)
+        // Fallback: just update the page title and show alert
+        document.title = `🔔 ${title} - KBL Kitchen`
         setTimeout(() => {
-          notification.close()
-        }, 10000)
+          document.title = "🍳 KBL Bites Kitchen"
+        }, 5000)
+        
+        // Show a simple alert as last resort
+        if (typeof window !== 'undefined') {
+          alert(`${title}\n${body}`)
+        }
       }
     },
     [hasPermission],
