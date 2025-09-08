@@ -153,7 +153,7 @@ export function CustomersTableView({ token }: CustomersTableViewProps) {
       return matchesSearch && matchesFilter
     })
 
-    // Sort customers
+    // Sort customers - newest first by default
     filtered.sort((a, b) => {
       let aValue: any
       let bValue: any
@@ -168,8 +168,11 @@ export function CustomersTableView({ token }: CustomersTableViewProps) {
           bValue = b.total_spent || 0
           break
         case "last_order_date":
-          aValue = new Date(a.last_order_date).getTime()
-          bValue = new Date(b.last_order_date).getTime()
+          aValue = new Date(a.last_order_date || 0).getTime()
+          bValue = new Date(b.last_order_date || 0).getTime()
+          // Handle invalid dates - put them at the end
+          if (isNaN(aValue)) aValue = -Infinity
+          if (isNaN(bValue)) bValue = -Infinity
           break
         case "total_orders":
         default:
@@ -178,10 +181,12 @@ export function CustomersTableView({ token }: CustomersTableViewProps) {
           break
       }
 
+      // For descending order (newest first), we want bValue - aValue
       if (sortOrder === "asc") {
-        return aValue > bValue ? 1 : -1
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
       } else {
-        return aValue < bValue ? 1 : -1
+        // Descending: newest first
+        return bValue - aValue
       }
     })
 

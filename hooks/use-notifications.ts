@@ -154,8 +154,8 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
       if (hasPermission && "Notification" in window) {
         const notification = new Notification(title, {
           body,
-          icon: icon || "/favicon.ico",
-          badge: "/favicon.ico",
+          icon: icon || "/logo.png",
+          badge: "/logo.png",
           tag: "kitchen-notification",
           requireInteraction: false,
           silent: false,
@@ -204,7 +204,7 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
       showBrowserNotification(
         "🍳 New Order Alert!",
         `${orderCount} new order${orderCount > 1 ? "s" : ""} received - Check the kitchen!`,
-        "/favicon.ico",
+        "/logo.png",
       )
 
       // Trigger callback
@@ -236,7 +236,7 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
       showBrowserNotification(
         "💬 New Message Alert!",
         `${messageCount} new message${messageCount > 1 ? "s" : ""} received`,
-        "/favicon.ico",
+        "/logo.png",
       )
 
       // Trigger callback

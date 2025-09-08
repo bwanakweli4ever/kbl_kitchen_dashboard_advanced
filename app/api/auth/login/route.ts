@@ -12,8 +12,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "API key is required" }, { status: 400 })
     }
 
-    console.log("🔐 Attempting login with API URL:", API_BASE_URL)
-    console.log("🔑 API Key provided:", apiKey ? "Yes" : "No")
 
     // Add timeout and better error handling
     const controller = new AbortController()
@@ -30,23 +28,18 @@ export async function POST(request: NextRequest) {
 
     clearTimeout(timeoutId)
     const responseText = await response.text()
-    console.log("📡 API Response Status:", response.status)
-    console.log("📡 API Response Body:", responseText)
 
     if (response.ok) {
       let data
       try {
         data = JSON.parse(responseText)
-        console.log("✅ Parsed JSON response:", data)
       } catch (e) {
-        console.log("⚠️ Response is not JSON, treating as token")
         // If response is not JSON, treat it as the token
         data = { token: responseText, access_token: responseText }
       }
 
       // Ensure we have a token field
       const token = data.token || data.access_token || responseText
-      console.log("🎫 Extracted token:", token ? "Present" : "Missing")
 
       if (!token) {
         return NextResponse.json(

@@ -17,7 +17,7 @@ export const config = {
   
   // Dashboard Settings
   dashboard: {
-    pollInterval: 30000, // 30 seconds - balanced for responsiveness and server load
+    pollInterval: 60000, // 1 minute - balanced for responsiveness and server load
     maxOrders: 50,
     autoRefresh: true,
   },

@@ -72,6 +72,8 @@ export default function KitchenDashboard() {
   const [activeTab, setActiveTab] = useState("orders");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [refreshSuccess, setRefreshSuccess] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [showMultipleItems, setShowMultipleItems] = useState<Set<number>>(new Set());
   const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
@@ -100,6 +102,19 @@ export default function KitchenDashboard() {
     } as any;
   });
 
+  // Suppress Fast Refresh console messages in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const originalConsoleLog = console.log;
+      console.log = (...args) => {
+        const message = args.join(' ');
+        if (!message.includes('[Fast Refresh]') && !message.includes('hot-reloader-client.js')) {
+          originalConsoleLog.apply(console, args);
+        }
+      };
+    }
+  }, []);
+
   // Notification system
   const notificationSystem = useNotifications({
     token,
@@ -122,16 +137,29 @@ export default function KitchenDashboard() {
     const now = Date.now()
     const lastFetchTime = lastFetch ? lastFetch.getTime() : 0
     if (now - lastFetchTime > 5000) {
-      await refreshOrders()
+    await refreshOrders()
     }
   }, [refreshOrders, lastFetch])
 
-  // Check for saved token on mount
+  // Check for saved token on mount - extended session
   useEffect(() => {
     const savedToken = localStorage.getItem("kitchen_token");
+    const tokenTimestamp = localStorage.getItem("kitchen_token_timestamp");
+    
     if (savedToken) {
-      setToken(savedToken);
-      setIsAuthenticated(true);
+      // Check if token is less than 24 hours old
+      const now = Date.now();
+      const tokenAge = tokenTimestamp ? now - parseInt(tokenTimestamp) : 0;
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      
+      if (tokenAge < maxAge) {
+        setToken(savedToken);
+        setIsAuthenticated(true);
+      } else {
+        // Token expired, remove it
+        localStorage.removeItem("kitchen_token");
+        localStorage.removeItem("kitchen_token_timestamp");
+      }
     }
     setLoading(false);
   }, []);
@@ -139,6 +167,7 @@ export default function KitchenDashboard() {
   // Define handleLogout early so it can be used in useEffect
   const handleLogout = () => {
     localStorage.removeItem("kitchen_token");
+    localStorage.removeItem("kitchen_token_timestamp");
     setToken(null);
     setIsAuthenticated(false);
     setApiKey("");
@@ -148,7 +177,14 @@ export default function KitchenDashboard() {
     notificationSystem.markAllAsRead();
   };
 
-  // Validate token only on mount and when token changes (no periodic validation)
+  const handleManualRefresh = async () => {
+    setRefreshSuccess(false);
+    await refreshOrders();
+    setRefreshSuccess(true);
+    setTimeout(() => setRefreshSuccess(false), 2000);
+  };
+
+  // Extended token validation - only validate every 5 minutes and don't logout on errors
   useEffect(() => {
     if (token && isAuthenticated) {
       const validateToken = async () => {
@@ -160,30 +196,22 @@ export default function KitchenDashboard() {
             },
           });
           
-          const data = await response.json();
-          
+          // Only logout on 401 (unauthorized) - ignore all other errors
           if (response.status === 401) {
             handleLogout();
-          } else if (response.status === 503) {
-            // Backend connection error - don't logout, just log
-            console.warn("Backend connection error:", data.message);
-          } else if (response.status === 408) {
-            // Timeout error - don't logout, just log
-            console.warn("Backend timeout:", data.message);
-          } else if (!response.ok) {
-            console.warn("Token validation failed with status:", response.status, data.message);
           }
+          // All other errors are silently ignored in production
         } catch (error) {
-          console.error("Token validation error:", error);
-          // Only logout on network errors if it's not a connection issue
-          if (error instanceof Error && !error.message.includes('fetch')) {
-            handleLogout();
-          }
+          // Ignore all network errors in production - keep user logged in
+          console.log("Token validation skipped due to network error");
         }
       };
       
-      // Only validate once when token changes
+      // Validate immediately, then every 5 minutes
       validateToken();
+      const interval = setInterval(validateToken, 5 * 60 * 1000); // 5 minutes
+      
+      return () => clearInterval(interval);
     }
   }, [token, isAuthenticated, handleLogout]);
 
@@ -198,8 +226,6 @@ export default function KitchenDashboard() {
         return;
       }
 
-      console.log("🔐 Attempting login with API key:", apiKey.trim() ? "Provided" : "Missing");
-
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
@@ -209,7 +235,6 @@ export default function KitchenDashboard() {
       });
 
       const data = await response.json();
-      console.log("📡 Login response:", { status: response.status, data });
 
       if (response.ok) {
         if (!data.token) {
@@ -217,12 +242,15 @@ export default function KitchenDashboard() {
           return;
         }
 
-        console.log("✅ Login successful, storing token");
         setToken(data.token);
         setIsAuthenticated(true);
         localStorage.setItem("kitchen_token", data.token);
+        localStorage.setItem("kitchen_token_timestamp", Date.now().toString());
+        
+        // Success animation
+        setSuccessMessage("🎉 Welcome to KBL Bites Kitchen!");
+        setTimeout(() => setSuccessMessage(""), 3000);
       } else {
-        console.error("❌ Login failed:", data);
         let errorMessage = data.error || "Invalid API key";
         
         if (data.details) {
@@ -236,7 +264,6 @@ export default function KitchenDashboard() {
         setError(errorMessage);
       }
     } catch (err) {
-      console.error("💥 Login error:", err);
       setError("Network error - check your connection and API URL");
     } finally {
       setLoading(false);
@@ -259,45 +286,15 @@ export default function KitchenDashboard() {
       });
       
       if (response.ok) {
-        const successElement = document.createElement('div');
-        successElement.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-        successElement.textContent = `✅ Order #${orderId} updated to ${status}`;
-        document.body.appendChild(successElement);
-
-        // Remove success message after 3 seconds
-        setTimeout(() => {
-          if (document.body.contains(successElement)) {
-            document.body.removeChild(successElement);
-          }
-        }, 3000);
-
+        // Silent success - no error messages in production
         // Refresh orders to immediately remove delivered/cancelled orders (debounced)
         await handleOrderStatusUpdated();
       } else if (response.status === 401) {
-        const errorElement = document.createElement('div');
-        errorElement.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-        errorElement.textContent = `❌ Authentication failed. Please log in again.`;
-        document.body.appendChild(errorElement);
-        
-        setTimeout(() => {
-          if (document.body.contains(errorElement)) {
-            document.body.removeChild(errorElement);
-          }
-        }, 3000);
-        
+        // Only logout on authentication failure - no error message
         handleLogout();
       }
     } catch (err) {
-      const errorElement = document.createElement('div');
-      errorElement.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      errorElement.textContent = `❌ Failed to update order #${orderId}`;
-      document.body.appendChild(errorElement);
-      
-      setTimeout(() => {
-        if (document.body.contains(errorElement)) {
-          document.body.removeChild(errorElement);
-        }
-      }, 3000);
+      // Silent error handling - no error messages in production
     } finally {
       setUpdatingOrders(prev => {
         const newSet = new Set(prev);
@@ -323,44 +320,15 @@ export default function KitchenDashboard() {
       });
       
       if (response.ok) {
-        const successElement = document.createElement('div');
-        successElement.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-        successElement.textContent = `✅ Order #${orderId} marked as delivered`;
-        document.body.appendChild(successElement);
-        
-        setTimeout(() => {
-          if (document.body.contains(successElement)) {
-            document.body.removeChild(successElement);
-          }
-        }, 3000);
-
+        // Silent success - no error messages in production
         // Refresh orders to immediately remove delivered order (debounced)
         await handleOrderStatusUpdated();
       } else if (response.status === 401) {
-        const errorElement = document.createElement('div');
-        errorElement.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-        errorElement.textContent = `❌ Authentication failed. Please log in again.`;
-        document.body.appendChild(errorElement);
-        
-        setTimeout(() => {
-          if (document.body.contains(errorElement)) {
-            document.body.removeChild(errorElement);
-          }
-        }, 3000);
-        
+        // Only logout on authentication failure - no error message
         handleLogout();
       }
     } catch (err) {
-      const errorElement = document.createElement('div');
-      errorElement.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      errorElement.textContent = `❌ Failed to close order #${orderId}`;
-      document.body.appendChild(errorElement);
-      
-      setTimeout(() => {
-        if (document.body.contains(errorElement)) {
-          document.body.removeChild(errorElement);
-        }
-      }, 3000);
+      // Silent error handling - no error messages in production
     } finally {
       setUpdatingOrders(prev => {
         const newSet = new Set(prev);
@@ -466,7 +434,7 @@ export default function KitchenDashboard() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 flex items-center justify-center p-2 sm:p-4">
-        <Card className="w-full max-w-sm sm:max-w-md">
+        <Card className="w-full max-w-sm sm:max-w-md transform transition-all duration-500 hover:scale-105 hover:shadow-2xl">
           <CardHeader className="text-center pb-4">
             <div className="flex flex-col items-center gap-3 mb-4">
               {/* KBL Bites Logo */}
@@ -474,7 +442,7 @@ export default function KitchenDashboard() {
                 <img 
                   src="/logo.png" 
                   alt="KBL Bites Logo" 
-                  className="w-12 h-12 sm:w-14 sm:h-14 object-contain"
+                  className="w-12 h-12 sm:w-14 sm:h-14 object-contain animate-bounce"
                 />
                 <div className="flex flex-col">
                   <CardTitle className="text-xl sm:text-2xl font-bold text-green-600 leading-tight">
@@ -501,12 +469,28 @@ export default function KitchenDashboard() {
             <Button
               onClick={handleLogin}
               disabled={loading || !apiKey}
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white h-10 sm:h-11 text-sm sm:text-base touch-manipulation shadow-lg hover:shadow-xl transition-all duration-200"
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white h-10 sm:h-11 text-sm sm:text-base touch-manipulation shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50"
             >
-              {loading ? "Connecting..." : "Connect to Kitchen"}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  <span>Connecting to Kitchen...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span>🍳</span>
+                  <span>Connect to Kitchen</span>
+                  <span>→</span>
+                </div>
+              )}
             </Button>
             {error && (
               <p className="text-red-500 text-xs sm:text-sm text-center px-2">{error}</p>
+            )}
+            {successMessage && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                <p className="text-green-600 text-sm font-medium animate-pulse">{successMessage}</p>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -549,7 +533,25 @@ export default function KitchenDashboard() {
             </div>
             <div className="flex flex-col xs:flex-row xs:items-center gap-1 xs:gap-2 sm:gap-4">
               <p className="text-gray-600 text-xs sm:text-sm md:text-base">{orders.length} active orders</p>
-              <RealTimeIndicator isConnected={true} lastUpdate={lastFetch || new Date()} isPolling={isPolling} />
+              <div className="flex items-center gap-2">
+                <RealTimeIndicator isConnected={true} lastUpdate={lastFetch || new Date()} isPolling={isPolling} />
+                <Button
+                  onClick={handleManualRefresh}
+                  variant="outline"
+                  size="sm"
+                  className={`flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2 h-7 sm:h-8 transition-all duration-200 ${
+                    refreshSuccess 
+                      ? 'text-green-600 bg-green-50 border-green-300' 
+                      : 'text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200'
+                  }`}
+                  disabled={isPolling}
+                >
+                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${isPolling ? 'animate-spin' : ''}`} />
+                  <span className="hidden xs:inline">
+                    {refreshSuccess ? 'Refreshed!' : 'Refresh'}
+                  </span>
+                </Button>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1 sm:gap-2 md:gap-4 flex-shrink-0">
@@ -579,26 +581,26 @@ export default function KitchenDashboard() {
             <TabsTrigger value="orders" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Utensils className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Active Orders</span>
-              <NotificationBadge count={notificationSystem.notifications.newOrders} />
-            </TabsTrigger>
+            <NotificationBadge count={notificationSystem.notifications.newOrders} />
+          </TabsTrigger>
             <TabsTrigger value="customers" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Users className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Customers</span>
-            </TabsTrigger>
+          </TabsTrigger>
             <TabsTrigger value="messages" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Messages</span>
-              <NotificationBadge count={notificationSystem.notifications.newMessages} />
-            </TabsTrigger>
+            <NotificationBadge count={notificationSystem.notifications.newMessages} />
+          </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Analytics</span>
-            </TabsTrigger>
+          </TabsTrigger>
             <TabsTrigger value="completed" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Completed</span>
-            </TabsTrigger>
-          </TabsList>
+          </TabsTrigger>
+        </TabsList>
         </div>
 
         {/* Orders Tab */}
@@ -662,16 +664,16 @@ export default function KitchenDashboard() {
                             <div className="flex items-center gap-3 sm:gap-4">
                               <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-lg flex-shrink-0">
                                 <span className="text-base sm:text-lg md:text-xl font-bold text-white">#{order.id}</span>
-                              </div>
+                            </div>
                               <div className="min-w-0 flex-1">
                                 <CardTitle className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 truncate">Order #{order.id}</CardTitle>
-                              </div>
                             </div>
-                            
-                            <div className="text-right">
+                          </div>
+                          
+                          <div className="text-right">
                               <div className="text-lg sm:text-xl md:text-2xl font-bold text-green-600">
-                                {formatCurrency(order.food_total)}
-                              </div>
+                              {formatCurrency(order.food_total)}
+                            </div>
                               <div className="text-xs sm:text-sm text-gray-500">Total</div>
                             </div>
                           </div>
@@ -740,7 +742,7 @@ export default function KitchenDashboard() {
                                   <div className="font-semibold text-orange-800">{getBreadChoice(order.size)}</div>
                                   <div className="text-sm text-orange-600">Quantity: ×{order.quantity}</div>
                                 </div>
-                              </div>
+                                </div>
 
                               {/* Ingredients Categories */}
                               {order.ingredients && order.ingredients.length > 0 && (
@@ -755,15 +757,15 @@ export default function KitchenDashboard() {
                                             <div className="flex items-center gap-2 mb-2">
                                               <span className="text-lg">🥩</span>
                                               <span className="font-semibold text-red-800">Proteins</span>
-                                            </div>
+                              </div>
                                             <div className="flex flex-wrap gap-1">
                                               {categories.proteins.map((protein, idx) => (
                                                 <span key={idx} className="px-2 py-1 bg-red-100 text-red-700 text-sm rounded border border-red-300 capitalize">
                                                   {protein.replace('-', ' ')}
                                                 </span>
                                               ))}
-                                            </div>
-                                          </div>
+                                </div>
+                                </div>
                                         )}
 
                                         {/* Vegetables */}
@@ -772,7 +774,7 @@ export default function KitchenDashboard() {
                                             <div className="flex items-center gap-2 mb-2">
                                               <span className="text-lg">🥬</span>
                                               <span className="font-semibold text-green-800">Vegetables</span>
-                                            </div>
+                              </div>
                                             <div className="flex flex-wrap gap-1">
                                               {categories.vegetables.map((veggie, idx) => (
                                                 <span key={idx} className="px-2 py-1 bg-green-100 text-green-700 text-sm rounded border border-green-300 capitalize">
@@ -902,18 +904,18 @@ export default function KitchenDashboard() {
                                                             <span className="text-lg">🍽️</span>
                                                             <span className="font-semibold text-gray-800">
                                                               Additional Order {idx + 1}: {getBreadChoice(item.size || 'Food Item')}
-                                                            </span>
+                                                  </span>
                                                           </div>
                                                           <span className="text-sm text-green-600 font-bold">
-                                                            {item.price ? `${item.price.toLocaleString()} RWF` : ''}
-                                                          </span>
-                                                        </div>
+                                                    {item.price ? `${item.price.toLocaleString()} RWF` : ''}
+                                                  </span>
+                                                </div>
                                                         
                                                         <div className="text-sm text-gray-600 mb-3">
-                                                          Qty: {item.quantity || 1} • Spice: {item.spice_level || 'No spice'} • Sauce: {item.sauce || 'No sauce'}
-                                                        </div>
+                                                  Qty: {item.quantity || 1} • Spice: {item.spice_level || 'No spice'} • Sauce: {item.sauce || 'No sauce'}
+                                                </div>
                                                         
-                                                        {item.ingredients && item.ingredients.length > 0 && (
+                                                {item.ingredients && item.ingredients.length > 0 && (
                                                           <div className="space-y-2">
                                                             {(() => {
                                                               const categories = categorizeIngredients(item.ingredients);
@@ -926,12 +928,12 @@ export default function KitchenDashboard() {
                                                                         <span className="text-sm">🥩</span>
                                                                         <span className="text-xs font-semibold text-red-700">Proteins</span>
                                                                       </div>
-                                                                      <div className="flex flex-wrap gap-1">
+                                                  <div className="flex flex-wrap gap-1">
                                                                         {categories.proteins.map((protein, ingIdx) => (
                                                                           <span key={ingIdx} className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded border border-red-300 capitalize">
                                                                             {protein.replace('-', ' ')}
-                                                                          </span>
-                                                                        ))}
+                                                      </span>
+                                                    ))}
                                                                       </div>
                                                                     </div>
                                                                   )}
@@ -1092,10 +1094,10 @@ export default function KitchenDashboard() {
                                                           </>
                                                         );
                                                       })()}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              ));
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ));
                                             }
                                           }
                                           return <span className="text-xs text-gray-600">{order.items}</span>;

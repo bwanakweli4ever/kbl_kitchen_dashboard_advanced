@@ -94,10 +94,16 @@ export function CustomersView({ token }: CustomersViewProps) {
         customer.profile_name?.toLowerCase().includes(searchTerm.toLowerCase()) || customer.wa_id?.includes(searchTerm),
     )
     .sort((a, b) => {
-      // Sort by last_order_date (newest first)
-      const dateA = new Date(a.last_order_date).getTime()
-      const dateB = new Date(b.last_order_date).getTime()
-      return dateB - dateA
+      // Sort by last_order_date (newest first) - more robust date handling
+      const dateA = new Date(a.last_order_date || 0).getTime()
+      const dateB = new Date(b.last_order_date || 0).getTime()
+      
+      // If dates are invalid, put them at the end
+      if (isNaN(dateA) && isNaN(dateB)) return 0
+      if (isNaN(dateA)) return 1
+      if (isNaN(dateB)) return -1
+      
+      return dateB - dateA // Descending order (newest first)
     })
 
   if (loading) {
