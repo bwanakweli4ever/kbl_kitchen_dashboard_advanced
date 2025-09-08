@@ -564,10 +564,32 @@ export default function KitchenDashboard() {
                     {refreshSuccess ? 'Refreshed!' : 'Refresh'}
                   </span>
                 </Button>
+                {notificationSystem.hasPermission && (
+                  <Button
+                    onClick={() => notificationSystem.triggerNewOrderNotification(1)}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2 h-7 sm:h-8"
+                  >
+                    <span className="text-sm">🔔</span>
+                    <span className="hidden xs:inline">Test</span>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-1 sm:gap-2 md:gap-4 flex-shrink-0">
+            {!notificationSystem.hasPermission && (
+              <Button
+                onClick={notificationSystem.requestNotificationPermission}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-1 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2 h-7 sm:h-8"
+              >
+                <span className="text-sm">🔔</span>
+                <span className="hidden xs:inline">Enable Notifications</span>
+              </Button>
+            )}
             <NotificationCenter
               newOrders={notificationSystem.notifications.newOrders}
               newMessages={notificationSystem.notifications.newMessages}

@@ -30,6 +30,79 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const fallbackAudioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Show browser notification
+  const showBrowserNotification = useCallback(
+    (title: string, body: string, icon?: string) => {
+      if (hasPermission && "Notification" in window) {
+        const notification = new Notification(title, {
+          body,
+          icon: icon || "/logo.png",
+          badge: "/logo.png",
+          tag: "kitchen-notification",
+          requireInteraction: true, // Keep notification until user interacts
+          silent: false,
+          data: {
+            url: window.location.href,
+            timestamp: Date.now()
+          }
+        })
+
+        // Handle notification click
+        notification.onclick = () => {
+          window.focus()
+          notification.close()
+        }
+
+        // Auto-close notification after 10 seconds (longer for mobile)
+        setTimeout(() => {
+          notification.close()
+        }, 10000)
+      }
+    },
+    [hasPermission],
+  )
+
+  // Request notification permission with better mobile support
+  const requestNotificationPermission = useCallback(async () => {
+    if (!("Notification" in window)) {
+      console.log("This browser does not support notifications")
+      return false
+    }
+
+    if (Notification.permission === "granted") {
+      setHasPermission(true)
+      return true
+    }
+
+    if (Notification.permission === "denied") {
+      console.log("Notification permission denied")
+      return false
+    }
+
+    try {
+      const permission = await Notification.requestPermission()
+      const granted = permission === "granted"
+      setHasPermission(granted)
+      
+      if (granted) {
+        console.log("✅ Notification permission granted!")
+        // Show a test notification
+        showBrowserNotification(
+          "🔔 Notifications Enabled!",
+          "You'll now receive alerts for new orders and messages.",
+          "/logo.png"
+        )
+      } else {
+        console.log("❌ Notification permission denied")
+      }
+      
+      return granted
+    } catch (error) {
+      console.error("Error requesting notification permission:", error)
+      return false
+    }
+  }, [showBrowserNotification])
+
   // Initialize audio and request notification permission
   useEffect(() => {
     // Create fallback audio using Web Audio API
@@ -125,10 +198,15 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
       // Try primary audio first
       if (audioRef.current && audioRef.current.readyState >= 2) {
         audioRef.current.currentTime = 0
-        audioRef.current.play().catch((e) => {
-          console.log("Primary audio failed, trying fallback:", e)
-          playFallbackSound()
-        })
+        audioRef.current.volume = volume / 100
+        
+        const playPromise = audioRef.current.play()
+        if (playPromise !== undefined) {
+          playPromise.catch((e) => {
+            console.log("Primary audio failed, trying fallback:", e)
+            playFallbackSound()
+          })
+        }
       } else {
         // Use fallback if primary audio isn't ready
         playFallbackSound()
@@ -137,7 +215,7 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
       console.log("Audio playback error, using fallback:", error)
       playFallbackSound()
     }
-  }, [soundEnabled])
+  }, [soundEnabled, volume])
 
   const playFallbackSound = useCallback(() => {
     if (fallbackAudioRef.current) {
@@ -148,27 +226,6 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
       }
     }
   }, [])
-
-  const showBrowserNotification = useCallback(
-    (title: string, body: string, icon?: string) => {
-      if (hasPermission && "Notification" in window) {
-        const notification = new Notification(title, {
-          body,
-          icon: icon || "/logo.png",
-          badge: "/logo.png",
-          tag: "kitchen-notification",
-          requireInteraction: false,
-          silent: false,
-        })
-
-        // Auto-close notification after 5 seconds
-        setTimeout(() => {
-          notification.close()
-        }, 5000)
-      }
-    },
-    [hasPermission],
-  )
 
   // Update browser tab title with notification count
   const updateTabTitle = useCallback((count: number) => {
@@ -282,5 +339,6 @@ export function useNotifications({ token, isActive, onNewOrder, onNewMessage }: 
     playNotificationSound,
     triggerNewOrderNotification,
     triggerNewMessageNotification,
+    requestNotificationPermission,
   }
 }
