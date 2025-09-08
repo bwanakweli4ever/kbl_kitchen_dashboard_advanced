@@ -546,26 +546,26 @@ export default function KitchenDashboard() {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <div className="overflow-x-auto scrollbar-hide mb-2 sm:mb-3 md:mb-4 lg:mb-6">
           <TabsList className="flex w-full gap-1 sm:gap-2 md:gap-3 min-w-max">
-            <TabsTrigger value="orders" className="flex items-center gap-2 sm:gap-3 relative text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
-              <Utensils className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+            <TabsTrigger value="orders" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+              <Utensils className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Active Orders</span>
               <NotificationBadge count={notificationSystem.notifications.newOrders} />
             </TabsTrigger>
-            <TabsTrigger value="customers" className="flex items-center gap-2 sm:gap-3 text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
-              <Users className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+            <TabsTrigger value="customers" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+              <Users className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Customers</span>
             </TabsTrigger>
-            <TabsTrigger value="messages" className="flex items-center gap-2 sm:gap-3 relative text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
-              <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+            <TabsTrigger value="messages" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+              <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Messages</span>
               <NotificationBadge count={notificationSystem.notifications.newMessages} />
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2 sm:gap-3 text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
-              <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+            <TabsTrigger value="analytics" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Analytics</span>
             </TabsTrigger>
-            <TabsTrigger value="completed" className="flex items-center gap-2 sm:gap-3 text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
-              <Package className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+            <TabsTrigger value="completed" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-2 touch-manipulation flex-shrink-0">
+              <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Completed</span>
             </TabsTrigger>
           </TabsList>
