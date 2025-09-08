@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -116,10 +116,15 @@ export default function KitchenDashboard() {
     onOrderUpdate: useCallback(() => {}, [])
   });
 
-  // Refresh orders after status update
+  // Refresh orders after status update (with debouncing)
   const handleOrderStatusUpdated = useCallback(async () => {
-    await refreshOrders()
-  }, [refreshOrders])
+    // Only refresh if it's been more than 5 seconds since last fetch
+    const now = Date.now()
+    const lastFetchTime = lastFetch ? lastFetch.getTime() : 0
+    if (now - lastFetchTime > 5000) {
+      await refreshOrders()
+    }
+  }, [refreshOrders, lastFetch])
 
   // Check for saved token on mount
   useEffect(() => {
@@ -143,7 +148,7 @@ export default function KitchenDashboard() {
     notificationSystem.markAllAsRead();
   };
 
-  // Validate token immediately when component mounts and periodically
+  // Validate token only on mount and when token changes (no periodic validation)
   useEffect(() => {
     if (token && isAuthenticated) {
       const validateToken = async () => {
@@ -177,12 +182,8 @@ export default function KitchenDashboard() {
         }
       };
       
-      // Initial validation
+      // Only validate once when token changes
       validateToken();
-      
-      // Set up periodic validation every 5 minutes
-      const interval = setInterval(validateToken, 5 * 60 * 1000);
-      return () => clearInterval(interval);
     }
   }, [token, isAuthenticated, handleLogout]);
 
@@ -270,7 +271,7 @@ export default function KitchenDashboard() {
           }
         }, 3000);
 
-        // Refresh orders to immediately remove delivered/cancelled orders
+        // Refresh orders to immediately remove delivered/cancelled orders (debounced)
         await handleOrderStatusUpdated();
       } else if (response.status === 401) {
         const errorElement = document.createElement('div');
@@ -333,7 +334,7 @@ export default function KitchenDashboard() {
           }
         }, 3000);
 
-        // Refresh orders to immediately remove delivered order
+        // Refresh orders to immediately remove delivered order (debounced)
         await handleOrderStatusUpdated();
       } else if (response.status === 401) {
         const errorElement = document.createElement('div');
@@ -531,8 +532,11 @@ export default function KitchenDashboard() {
             <div className="relative">
               {/* Orders Count */}
               <div className="flex items-center justify-center mb-2 sm:mb-3 md:mb-4">
-                <div className="text-xs sm:text-sm text-gray-600 text-center px-3 py-2 bg-white/80 backdrop-blur-sm rounded-lg shadow-sm">
-                  {orders.length} active orders
+                <div className="text-xs sm:text-sm text-gray-600 text-center px-3 py-2 bg-white/80 backdrop-blur-sm rounded-lg shadow-sm flex items-center gap-2">
+                  <span>{orders.length} active orders</span>
+                  {isPolling && (
+                    <RefreshCw className="h-3 w-3 animate-spin text-green-500" />
+                  )}
                 </div>
               </div>
 
@@ -577,10 +581,10 @@ export default function KitchenDashboard() {
                             </div>
                             
                             <div className="text-right">
-                              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-green-600">
+                              <div className="text-lg sm:text-xl md:text-2xl font-bold text-green-600">
                                 {formatCurrency(order.food_total)}
                               </div>
-                              <div className="text-sm sm:text-base text-gray-500">Total</div>
+                              <div className="text-xs sm:text-sm text-gray-500">Total</div>
                             </div>
                           </div>
                           

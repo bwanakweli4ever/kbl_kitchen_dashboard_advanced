@@ -175,45 +175,90 @@ export function useRealTimeOrders({
     }
   }, [token, isActive, onNewOrder, onOrderUpdate, setOrdersOptimized])
 
-  // Debounced polling to prevent rapid updates
-  const [lastPollTime, setLastPollTime] = useState(0)
-  const POLL_DEBOUNCE = 5000 // Minimum 5 seconds between polls
+  // Refs for stable polling state
+  const lastPollTimeRef = useRef(0)
+  const pollingActiveRef = useRef(false)
+  const consecutiveErrorsRef = useRef(0)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  
+  const POLL_DEBOUNCE = 10000 // Minimum 10 seconds between polls
+  const MAX_POLL_INTERVAL = 60000 // Maximum 1 minute between polls
+  
+  // Stable polling function using refs
+  const pollOrders = useCallback(async () => {
+    if (!isActive || !token || pollingActiveRef.current) {
+      return
+    }
+
+    const now = Date.now()
+    
+    // Skip if too soon since last poll
+    if (now - lastPollTimeRef.current < POLL_DEBOUNCE) {
+      return
+    }
+    
+    try {
+      pollingActiveRef.current = true
+      setIsPolling(true)
+      await fetchOrders()
+      lastPollTimeRef.current = now
+      consecutiveErrorsRef.current = 0 // Reset error count on success
+    } catch (error) {
+      console.error("Polling error:", error)
+      consecutiveErrorsRef.current += 1
+    } finally {
+      setIsPolling(false)
+      pollingActiveRef.current = false
+    }
+  }, [isActive, token, fetchOrders])
   
   useEffect(() => {
-    if (!isActive || !token) return
-
-    const pollOrders = async () => {
-      const now = Date.now()
-      if (now - lastPollTime < POLL_DEBOUNCE) {
-        return // Skip if too soon since last poll
+    if (!isActive || !token) {
+      pollingActiveRef.current = false
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
       }
-      
-      try {
-        setIsPolling(true)
-        await fetchOrders()
-        setLastPollTime(now)
-      } catch (error) {
-        console.error("Polling error:", error)
-      } finally {
-        setIsPolling(false)
-      }
+      return
     }
 
     // Initial fetch
     pollOrders()
 
-    // Set up polling interval using config
-    const interval = setInterval(pollOrders, config.dashboard.pollInterval)
+    // Dynamic polling interval based on errors
+    const getPollInterval = () => {
+      if (consecutiveErrorsRef.current > 3) {
+        return MAX_POLL_INTERVAL // Slow down on repeated errors
+      }
+      return config.dashboard.pollInterval
+    }
 
-    return () => clearInterval(interval)
-  }, [isActive, token, lastPollTime, fetchOrders])
+    // Set up polling interval
+    intervalRef.current = setInterval(pollOrders, getPollInterval())
 
-  // Manual refresh
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+      pollingActiveRef.current = false
+    }
+  }, [isActive, token, pollOrders])
+
+  // Manual refresh with debouncing
   const refreshOrders = useCallback(async () => {
-    if (!token) return
+    if (!token || pollingActiveRef.current) return
+    
+    const now = Date.now()
+    if (now - lastPollTimeRef.current < 3000) { // Minimum 3 seconds between manual refreshes
+      console.log("Manual refresh skipped - too soon since last fetch")
+      return
+    }
+    
     setLoading(true) // Show loading for manual refresh
+    lastPollTimeRef.current = now
     await fetchOrders()
-  }, [fetchOrders])
+  }, [fetchOrders, token])
 
   return {
     orders,
