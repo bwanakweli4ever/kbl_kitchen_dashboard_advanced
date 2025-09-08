@@ -88,10 +88,17 @@ export function CustomersView({ token }: CustomersViewProps) {
     }
   }
 
-  const filteredCustomers = customers.filter(
-    (customer) =>
-      customer.profile_name?.toLowerCase().includes(searchTerm.toLowerCase()) || customer.wa_id?.includes(searchTerm),
-  )
+  const filteredCustomers = customers
+    .filter(
+      (customer) =>
+        customer.profile_name?.toLowerCase().includes(searchTerm.toLowerCase()) || customer.wa_id?.includes(searchTerm),
+    )
+    .sort((a, b) => {
+      // Sort by last_order_date (newest first)
+      const dateA = new Date(a.last_order_date).getTime()
+      const dateB = new Date(b.last_order_date).getTime()
+      return dateB - dateA
+    })
 
   if (loading) {
     return (

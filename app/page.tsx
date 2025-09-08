@@ -75,7 +75,6 @@ export default function KitchenDashboard() {
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [showMultipleItems, setShowMultipleItems] = useState<Set<number>>(new Set());
   const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
-  const [scrollPosition, setScrollPosition] = useState(0);
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -198,6 +197,8 @@ export default function KitchenDashboard() {
         return;
       }
 
+      console.log("🔐 Attempting login with API key:", apiKey.trim() ? "Provided" : "Missing");
+
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
@@ -207,6 +208,7 @@ export default function KitchenDashboard() {
       });
 
       const data = await response.json();
+      console.log("📡 Login response:", { status: response.status, data });
 
       if (response.ok) {
         if (!data.token) {
@@ -214,13 +216,26 @@ export default function KitchenDashboard() {
           return;
         }
 
+        console.log("✅ Login successful, storing token");
         setToken(data.token);
         setIsAuthenticated(true);
         localStorage.setItem("kitchen_token", data.token);
       } else {
-        setError(data.error || data.details || "Invalid API key");
+        console.error("❌ Login failed:", data);
+        let errorMessage = data.error || "Invalid API key";
+        
+        if (data.details) {
+          errorMessage += ` - ${data.details}`;
+        }
+        
+        if (data.connectionError) {
+          errorMessage = `Cannot connect to backend server (${data.backendUrl}). Please check if the server is running.`;
+        }
+        
+        setError(errorMessage);
       }
     } catch (err) {
+      console.error("💥 Login error:", err);
       setError("Network error - check your connection and API URL");
     } finally {
       setLoading(false);
@@ -374,7 +389,9 @@ export default function KitchenDashboard() {
     }
   };
 
-  const toggleMultipleItems = (orderId: number) => {
+  const toggleMultipleItems = (orderId: number, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
     setShowMultipleItems(prev => {
       const newSet = new Set(prev);
       if (newSet.has(orderId)) {
@@ -386,43 +403,37 @@ export default function KitchenDashboard() {
     });
   };
 
-  const scrollLeft = () => {
-    setScrollPosition(prev => Math.max(0, prev - 5));
-  };
-
-  const scrollRight = () => {
-    setScrollPosition(prev => Math.min(orders.length - 5, prev + 5));
-  };
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-green-600">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 flex items-center justify-center p-2 sm:p-4">
+        <Card className="w-full max-w-sm sm:max-w-md">
+          <CardHeader className="text-center pb-4">
+            <CardTitle className="text-xl sm:text-2xl font-bold text-green-600">
               🍳 KBL Bites Kitchen
             </CardTitle>
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-sm sm:text-base">
               Enter your API key to access orders
             </p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 sm:space-y-4">
             <Input
               type="password"
               placeholder="API Key"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+              className="h-10 sm:h-11 text-sm sm:text-base"
             />
             <Button
               onClick={handleLogin}
               disabled={loading || !apiKey}
-              className="w-full bg-green-500 hover:bg-green-600"
+              className="w-full bg-green-500 hover:bg-green-600 h-10 sm:h-11 text-sm sm:text-base touch-manipulation"
             >
               {loading ? "Connecting..." : "Connect to Kitchen"}
             </Button>
             {error && (
-              <p className="text-red-500 text-sm text-center">{error}</p>
+              <p className="text-red-500 text-xs sm:text-sm text-center px-2">{error}</p>
             )}
           </CardContent>
         </Card>
@@ -441,18 +452,18 @@ export default function KitchenDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 p-1 sm:p-2 md:p-4">
       {/* Header */}
-      <div className="mb-4 md:mb-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-4xl font-bold text-green-600 mb-2">🍳 KBL Bites Kitchen Dashboard</h1>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <p className="text-gray-600 text-sm md:text-base">{orders.length} active orders</p>
+      <div className="mb-2 sm:mb-3 md:mb-4 lg:mb-6">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 xl:gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-green-600 mb-1 sm:mb-2 truncate">🍳 KBL Bites Kitchen Dashboard</h1>
+            <div className="flex flex-col xs:flex-row xs:items-center gap-1 xs:gap-2 sm:gap-4">
+              <p className="text-gray-600 text-xs sm:text-sm md:text-base">{orders.length} active orders</p>
               <RealTimeIndicator isConnected={true} lastUpdate={lastFetch || new Date()} isPolling={isPolling} />
             </div>
           </div>
-          <div className="flex items-center gap-2 md:gap-4">
+          <div className="flex items-center gap-1 sm:gap-2 md:gap-4 flex-shrink-0">
             <NotificationCenter
               newOrders={notificationSystem.notifications.newOrders}
               newMessages={notificationSystem.notifications.newMessages}
@@ -463,9 +474,9 @@ export default function KitchenDashboard() {
               onClick={handleLogout}
               variant="outline"
               size="sm"
-              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 text-xs md:text-sm"
+              className="flex items-center gap-1 sm:gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
             >
-              <span className="text-base md:text-lg">🚪</span>
+              <span className="text-sm sm:text-base md:text-lg">🚪</span>
               <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
@@ -474,30 +485,32 @@ export default function KitchenDashboard() {
 
       {/* Navigation Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1 md:gap-2 mb-4 md:mb-6">
-          <TabsTrigger value="orders" className="flex items-center gap-1 md:gap-2 relative text-xs md:text-sm">
-            <Utensils className="h-3 w-3 md:h-4 md:w-4" />
-            <span className="hidden sm:inline">Active Orders</span>
-            <NotificationBadge count={notificationSystem.notifications.newOrders} />
-          </TabsTrigger>
-          <TabsTrigger value="customers" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
-            <Users className="h-3 w-3 md:h-4 md:w-4" />
-            <span className="hidden sm:inline">Customers</span>
-          </TabsTrigger>
-          <TabsTrigger value="messages" className="flex items-center gap-1 md:gap-2 relative text-xs md:text-sm">
-            <MessageSquare className="h-3 w-3 md:h-4 md:w-4" />
-            <span className="hidden sm:inline">Messages</span>
-            <NotificationBadge count={notificationSystem.notifications.newMessages} />
-          </TabsTrigger>
-          <TabsTrigger value="analytics" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
-            <BarChart3 className="h-3 w-3 md:h-4 md:w-4" />
-            <span className="hidden sm:inline">Analytics</span>
-          </TabsTrigger>
-          <TabsTrigger value="completed" className="flex items-center gap-2 text-xs md:text-sm">
-            <Package className="h-3 w-3 md:h-4 md:w-4" />
-            <span className="hidden sm:inline">Completed</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto scrollbar-hide mb-2 sm:mb-3 md:mb-4 lg:mb-6">
+          <TabsList className="flex w-full gap-1 sm:gap-2 md:gap-3 min-w-max">
+            <TabsTrigger value="orders" className="flex items-center gap-2 sm:gap-3 relative text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
+              <Utensils className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Active Orders</span>
+              <NotificationBadge count={notificationSystem.notifications.newOrders} />
+            </TabsTrigger>
+            <TabsTrigger value="customers" className="flex items-center gap-2 sm:gap-3 text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
+              <Users className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Customers</span>
+            </TabsTrigger>
+            <TabsTrigger value="messages" className="flex items-center gap-2 sm:gap-3 relative text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
+              <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Messages</span>
+              <NotificationBadge count={notificationSystem.notifications.newMessages} />
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="flex items-center gap-2 sm:gap-3 text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
+              <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Analytics</span>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="flex items-center gap-2 sm:gap-3 text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-3 touch-manipulation flex-shrink-0">
+              <Package className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Completed</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Orders Tab */}
         <TabsContent value="orders">
@@ -516,45 +529,23 @@ export default function KitchenDashboard() {
             </div>
           ) : (
             <div className="relative">
-              {/* Navigation Arrows */}
-              <div className="flex items-center justify-between mb-4">
-                <Button
-                  onClick={scrollLeft}
-                  disabled={scrollPosition === 0}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2 bg-white/80 backdrop-blur-sm hover:bg-white shadow-lg"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  <span className="hidden sm:inline">Previous 5</span>
-                </Button>
-                
-                <div className="text-sm text-gray-600">
-                  {scrollPosition + 1}-{Math.min(scrollPosition + 5, orders.length)} of {orders.length} orders
+              {/* Orders Count */}
+              <div className="flex items-center justify-center mb-2 sm:mb-3 md:mb-4">
+                <div className="text-xs sm:text-sm text-gray-600 text-center px-3 py-2 bg-white/80 backdrop-blur-sm rounded-lg shadow-sm">
+                  {orders.length} active orders
                 </div>
-                
-                <Button
-                  onClick={scrollRight}
-                  disabled={scrollPosition === orders.length - 5}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2 bg-white/80 backdrop-blur-sm hover:bg-white shadow-lg"
-                >
-                  <span className="hidden sm:inline">Next 5</span>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
               </div>
 
-              {/* Single Row Display - Show 5 Orders */}
-              <div className="flex gap-4 md:gap-6 px-2 md:px-1 overflow-x-auto scrollbar-hide">
-                {orders.slice(scrollPosition, scrollPosition + 5).map((order, index) => {
+              {/* Responsive Grid Display */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-responsive">
+                {orders.map((order, index) => {
                   const spiceLevel = getSpiceLevel(order.spice_level);
                   const animationDelay = index * 0.1; // Stagger the animations
 
                   return (
                     <Card
                       key={order.id}
-                      className="w-full max-w-md flex-shrink-0 shadow-xl hover:shadow-2xl transition-all duration-500 border-2 border-gray-100 hover:border-green-300 bg-gradient-to-br from-white to-gray-50 relative rounded-xl overflow-hidden transform translate-x-0 animate-in slide-in-from-right-8 duration-700 ease-out hover:translate-x-1 hover:scale-105"
+                      className="w-full max-w-md sm:max-w-none shadow-xl hover:shadow-2xl transition-all duration-300 border-2 border-gray-200 hover:border-green-400 bg-gradient-to-br from-white to-gray-50 relative rounded-xl overflow-hidden transform hover:scale-105 active:scale-95 touch-manipulation"
                       style={{
                         animationDelay: `${animationDelay}s`,
                         animationFillMode: 'both'
@@ -564,80 +555,84 @@ export default function KitchenDashboard() {
                       <button
                         onClick={() => closeOrder(order.id)}
                         disabled={updatingOrders.has(order.id)}
-                        className="absolute top-2 right-2 h-8 w-8 p-0 rounded-md hover:bg-red-100 hover:text-red-600 flex items-center justify-center z-10 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                        className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-md hover:bg-red-100 hover:text-red-600 flex items-center justify-center z-10 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 touch-manipulation"
                       >
                         {updatingOrders.has(order.id) ? (
-                          <span className="animate-spin text-red-600">⏳</span>
+                          <span className="animate-spin text-red-600 text-xs sm:text-sm">⏳</span>
                         ) : (
-                          <X className="h-4 w-4" />
+                          <X className="h-3 w-3 sm:h-4 sm:w-4" />
                         )}
                       </button>
 
-                      <CardHeader className="pb-4 pr-12 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-md">
-                              <span className="text-lg font-bold text-white">#{order.id}</span>
-                            </div>
-                            <div>
-                              <CardTitle className="text-lg font-bold text-gray-900 mb-1">Order #{order.id}</CardTitle>
-                              <div className="text-xs text-gray-600 font-medium">
-                                {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString()}
+                      <CardHeader className="pb-4 sm:pb-5 md:pb-6 pr-10 sm:pr-12 md:pr-14 bg-gradient-to-r from-gray-50 to-white border-b-2 border-gray-200 p-4 sm:p-5 md:p-6">
+                        <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 sm:gap-4">
+                              <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-lg flex-shrink-0">
+                                <span className="text-base sm:text-lg md:text-xl font-bold text-white">#{order.id}</span>
                               </div>
+                              <div className="min-w-0 flex-1">
+                                <CardTitle className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 truncate">Order #{order.id}</CardTitle>
+                              </div>
+                            </div>
+                            
+                            <div className="text-right">
+                              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-green-600">
+                                {formatCurrency(order.food_total)}
+                              </div>
+                              <div className="text-sm sm:text-base text-gray-500">Total</div>
                             </div>
                           </div>
                           
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-green-600">
-                              {formatCurrency(order.food_total)}
-                            </div>
-                            <div className="text-xs text-gray-500">Total Value</div>
+                          <div className="text-base sm:text-lg text-gray-600 font-medium">
+                            {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString()}
                           </div>
                         </div>
                         
                         {/* Customer Info */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-gray-200 shadow-sm">
-                            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                              <User className="h-3 w-3 text-blue-600" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                          <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <div className="w-5 h-5 sm:w-6 sm:h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <User className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
                             </div>
-                            <div>
-                              <div className="font-medium text-sm text-gray-900">{order.profile_name || 'Unknown'}</div>
-                              <div className="text-xs text-gray-600">Customer</div>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-sm sm:text-base text-gray-900 break-words">{order.profile_name || 'Unknown'}</div>
+                              <div className="text-xs sm:text-sm text-gray-600">Customer</div>
                             </div>
-                            <Badge variant="outline" className="ml-auto bg-green-50 text-green-700 border-green-300 text-xs px-2 py-1">
-                              {order.customer_total_orders || 0} orders
+                            <Badge variant="outline" className="ml-auto bg-green-50 text-green-700 border-green-300 text-xs sm:text-sm px-2 py-1 flex-shrink-0">
+                              {order.customer_total_orders || 0}
                             </Badge>
                           </div>
                           
-                          <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-gray-200 shadow-sm">
-                            <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
-                              <Phone className="h-3 w-3 text-purple-600" />
+                          <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <div className="w-5 h-5 sm:w-6 sm:h-6 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <Phone className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600" />
                             </div>
-                            <div>
-                              <div className="font-medium text-sm text-gray-900">{order.wa_id || 'No ID'}</div>
-                              <div className="text-xs text-gray-600">Phone/ID</div>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-sm sm:text-base text-gray-900 break-words">{order.wa_id || 'No ID'}</div>
+                              <div className="text-xs sm:text-sm text-gray-600">Phone/ID</div>
                             </div>
                           </div>
                         </div>
                       </CardHeader>
 
-                      <CardContent className="space-y-4">
+                      <CardContent className="space-y-5 p-4 sm:p-5 md:p-6">
                         {/* Food Item Details */}
-                        <div className="p-3 space-y-3 bg-gray-50">
-                          <div className="bg-white rounded-lg p-3 border border-gray-200">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg">🍽️</span>
-                                <h4 className="font-semibold text-sm text-gray-800">Food Items</h4>
+                        <div className="p-4 sm:p-5 space-y-4 bg-gray-50 rounded-xl">
+                          <div className="bg-white rounded-xl p-4 sm:p-5 border-2 border-gray-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                <span className="text-xl sm:text-2xl">🍽️</span>
+                                <h4 className="font-bold text-base sm:text-lg text-gray-800">Food Items</h4>
                               </div>
                               {(order.items || order.drinks) && (
                                 <button
-                                  onClick={() => toggleMultipleItems(order.id)}
-                                  className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                                  onClick={(e) => toggleMultipleItems(order.id, e)}
+                                  className="text-sm sm:text-base text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-2 touch-manipulation px-3 py-1.5 rounded-lg hover:bg-blue-50"
+                                  type="button"
                                 >
                                   {showMultipleItems.has(order.id) ? 'Show Less' : 'Show More'}
-                                  <span className="text-xs">
+                                  <span className="text-sm">
                                     {showMultipleItems.has(order.id) ? '▲' : '▼'}
                                   </span>
                                 </button>
@@ -645,25 +640,25 @@ export default function KitchenDashboard() {
                             </div>
                             
                             {/* Main Food Item */}
-                            <div className="grid grid-cols-2 gap-3 mb-2">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-500 text-sm">🍞</span>
-                                  <span className="text-sm">{order.size}</span>
+                            <div className="grid grid-cols-2 gap-4 mb-3">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-gray-500 text-lg">🍞</span>
+                                  <span className="text-base sm:text-lg font-medium">{order.size}</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-500 text-sm">🔢</span>
-                                  <span className="text-sm">×{order.quantity}</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-gray-500 text-lg">🔢</span>
+                                  <span className="text-base sm:text-lg font-medium">×{order.quantity}</span>
                                 </div>
                               </div>
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-500 text-sm">🔥</span>
-                                  <span className="text-sm">{order.spice_level || 'Not specified'}</span>
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-gray-500 text-lg">🔥</span>
+                                  <span className="text-base sm:text-lg font-medium">{order.spice_level || 'Not specified'}</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-500 text-sm">🥫</span>
-                                  <span className="text-sm">{order.sauce || 'No sauce'}</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-gray-500 text-lg">🥫</span>
+                                  <span className="text-base sm:text-lg font-medium">{order.sauce || 'No sauce'}</span>
                                 </div>
                               </div>
                             </div>
@@ -777,15 +772,15 @@ export default function KitchenDashboard() {
                         )}
 
                         {/* Action Buttons */}
-                        <div className="bg-gradient-to-r from-gray-50 to-white p-3 rounded-lg border border-gray-200">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs">⚡</span>
+                        <div className="bg-gradient-to-r from-gray-50 to-white p-4 sm:p-5 rounded-xl border-2 border-gray-200 shadow-sm">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                              <span className="text-sm">⚡</span>
                             </div>
-                            <h4 className="font-semibold text-sm text-gray-900">Order Actions</h4>
+                            <h4 className="font-bold text-base sm:text-lg text-gray-900">Order Actions</h4>
                           </div>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <OrderStatusDialog
                               orderId={order.id}
                               currentStatus={order.status}
@@ -799,14 +794,15 @@ export default function KitchenDashboard() {
                               <button
                                 onClick={() => updateOrderStatus(order.id, "preparing")}
                                 disabled={updatingOrders.has(order.id)}
-                                className="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600 active:scale-95 disabled:scale-100 h-10 px-4 shadow-lg hover:shadow-xl"
+                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-lg hover:shadow-xl touch-manipulation"
                               >
                                 {updatingOrders.has(order.id) ? (
-                                  <span className="animate-spin">⏳</span>
+                                  <span className="animate-spin text-lg">⏳</span>
                                 ) : (
-                                  <span className="text-lg">🔥</span>
+                                  <span className="text-xl">🔥</span>
                                 )}
-                                {updatingOrders.has(order.id) ? "Updating..." : "Start Prep"}
+                                <span className="hidden xs:inline">{updatingOrders.has(order.id) ? "Updating..." : "Start Prep"}</span>
+                                <span className="xs:hidden">{updatingOrders.has(order.id) ? "..." : "Prep"}</span>
                               </button>
                             )}
 
@@ -814,14 +810,15 @@ export default function KitchenDashboard() {
                               <button
                                 onClick={() => updateOrderStatus(order.id, "ready")}
                                 disabled={updatingOrders.has(order.id)}
-                                className="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 active:scale-95 disabled:scale-100 h-10 px-4 shadow-lg hover:shadow-xl"
+                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-lg hover:shadow-xl touch-manipulation"
                               >
                                 {updatingOrders.has(order.id) ? (
-                                  <span className="animate-spin">⏳</span>
+                                  <span className="animate-spin text-lg">⏳</span>
                                 ) : (
-                                  <span className="text-lg">✅</span>
+                                  <span className="text-xl">✅</span>
                                 )}
-                                {updatingOrders.has(order.id) ? "Updating..." : "Mark Ready"}
+                                <span className="hidden xs:inline">{updatingOrders.has(order.id) ? "Updating..." : "Mark Ready"}</span>
+                                <span className="xs:hidden">{updatingOrders.has(order.id) ? "..." : "Ready"}</span>
                               </button>
                             )}
 
@@ -829,14 +826,15 @@ export default function KitchenDashboard() {
                               <button
                                 onClick={() => updateOrderStatus(order.id, "delivered")}
                                 disabled={updatingOrders.has(order.id)}
-                                className="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 active:scale-95 disabled:scale-100 h-10 px-4 shadow-lg hover:shadow-xl"
+                                className="w-full inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-xl text-base sm:text-lg font-bold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 active:scale-95 disabled:scale-100 h-12 sm:h-14 px-6 sm:px-8 shadow-lg hover:shadow-xl touch-manipulation"
                               >
                                 {updatingOrders.has(order.id) ? (
-                                  <span className="animate-spin">⏳</span>
+                                  <span className="animate-spin text-lg">⏳</span>
                                 ) : (
-                                  <span className="text-lg">🚚</span>
+                                  <span className="text-xl">🚚</span>
                                 )}
-                                {updatingOrders.has(order.id) ? "Updating..." : "Mark Delivered"}
+                                <span className="hidden xs:inline">{updatingOrders.has(order.id) ? "Updating..." : "Mark Delivered"}</span>
+                                <span className="xs:hidden">{updatingOrders.has(order.id) ? "..." : "Deliver"}</span>
                               </button>
                             )}
                           </div>

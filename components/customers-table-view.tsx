@@ -29,7 +29,7 @@ export function CustomersTableView({ token }: CustomersTableViewProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const [sortBy, setSortBy] = useState<string>("total_orders")
+  const [sortBy, setSortBy] = useState<string>("last_order_date")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [filterBy, setFilterBy] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)

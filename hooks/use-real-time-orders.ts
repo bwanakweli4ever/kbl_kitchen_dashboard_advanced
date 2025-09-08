@@ -173,11 +173,11 @@ export function useRealTimeOrders({
       // Always set loading to false after fetch
       setLoading(false)
     }
-  }, [token, isActive, onNewOrder, onOrderUpdate, orders.length, setOrdersOptimized])
+  }, [token, isActive, onNewOrder, onOrderUpdate, setOrdersOptimized])
 
   // Debounced polling to prevent rapid updates
   const [lastPollTime, setLastPollTime] = useState(0)
-  const POLL_DEBOUNCE = 2000 // Minimum 2 seconds between polls
+  const POLL_DEBOUNCE = 5000 // Minimum 5 seconds between polls
   
   useEffect(() => {
     if (!isActive || !token) return
@@ -202,7 +202,7 @@ export function useRealTimeOrders({
     // Initial fetch
     pollOrders()
 
-    // Set up polling interval
+    // Set up polling interval using config
     const interval = setInterval(pollOrders, config.dashboard.pollInterval)
 
     return () => clearInterval(interval)

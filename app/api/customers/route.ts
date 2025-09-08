@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { config } from "@/lib/config"
 
-//const API_BASE_URL = process.env.WHATSAPP_API_URL || "https://backend.kblbites.com"
-const API_BASE_URL = process.env.WHATSAPP_API_URL || "http://localhost:8000"
+const API_BASE_URL = process.env.WHATSAPP_API_URL || config.api.baseUrl
 
 
 export async function GET(request: NextRequest) {

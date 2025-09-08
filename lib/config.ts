@@ -2,7 +2,8 @@
 export const config = {
   // API Configuration
   api: {
-    baseUrl: process.env.WHATSAPP_API_URL || "http://localhost:8000",
+    //baseUrl: process.env.WHATSAPP_API_URL || "http://localhost:8000",
+    baseUrl: "https://backend.kblbites.com",
     timeout: 15000, // 15 seconds
     retryAttempts: 3,
   },
@@ -16,7 +17,7 @@ export const config = {
   
   // Dashboard Settings
   dashboard: {
-    pollInterval: 60000, // 1 minute
+    pollInterval: 15000, // 15 seconds - reduced for better responsiveness
     maxOrders: 50,
     autoRefresh: true,
   },
