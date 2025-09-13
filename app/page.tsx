@@ -372,7 +372,7 @@ export default function KitchenDashboard() {
   };
 
   // Helper function to categorize ingredients
-  const categorizeIngredients = (ingredients: string[]) => {
+  const categorizeIngredients = (ingredients: string[] | null | undefined) => {
     const categories = {
       proteins: [] as string[],
       vegetables: [] as string[],
@@ -381,7 +381,15 @@ export default function KitchenDashboard() {
       other: [] as string[]
     };
 
+    if (!ingredients || !Array.isArray(ingredients)) {
+      return categories;
+    }
+
     ingredients.forEach(ingredient => {
+      if (!ingredient || typeof ingredient !== 'string') {
+        return;
+      }
+      
       const lower = ingredient.toLowerCase();
       
       // Proteins
@@ -420,13 +428,17 @@ export default function KitchenDashboard() {
   };
 
   // Helper function to get bread/wrap choice
-  const getBreadChoice = (size: string) => {
+  const getBreadChoice = (size: string | null | undefined) => {
+    if (!size || typeof size !== 'string') {
+      return '🍽️ Food Item';
+    }
+    
     const lower = size.toLowerCase();
     if (lower.includes('wrap')) return `🌯 ${size}`;
     if (lower.includes('sandwich')) return `🥪 ${size}`;
     if (lower.includes('burger')) return `🍔 ${size}`;
     if (lower.includes('bread')) return `🍞 ${size}`;
-    return `🍞 ${size}`;
+    return `🍽️ ${size}`;
   };
 
   const toggleMultipleItems = (orderId: number, event: React.MouseEvent) => {
