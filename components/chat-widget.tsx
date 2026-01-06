@@ -146,7 +146,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWi
         setMessages((prev) => [...prev, sentMessage])
 
         // Refresh messages to get the latest from server
-        setTimeout(() => fetchMessages(), 1000)
+        await fetchMessages()
       } else {
         console.log("❌ API Error:", data)
         setError(data.error || "Failed to send message")
@@ -159,6 +159,18 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWi
       console.log("🏁 Send process completed")
     }
   }
+
+  // Auto-refresh messages every 5 seconds when chat is open
+  useEffect(() => {
+    if (!open || !token || !phoneNumber) return
+
+    fetchMessages() // Initial fetch
+    const interval = setInterval(() => {
+      fetchMessages()
+    }, 5000) // Refresh every 5 seconds
+
+    return () => clearInterval(interval)
+  }, [open, token, phoneNumber])
 
   const handleOpenChange = (newOpen: boolean) => {
     console.log("Chat dialog open change:", newOpen)
@@ -273,7 +285,66 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWi
                           message.direction === "outbound" ? "bg-green-500 text-white" : "bg-gray-100 text-gray-900",
                         )}
                       >
-                        <div className="whitespace-pre-wrap">{message.body}</div>
+                        {/* Check if message contains location data */}
+                        {(() => {
+                          try {
+                            // Try to parse as JSON (location objects from WhatsApp)
+                            const parsed = JSON.parse(message.body);
+                            if (parsed && (parsed.latitude || parsed.longitude || parsed.address)) {
+                              return (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-lg">📍</span>
+                                    <span className="font-semibold">Location Shared</span>
+                                  </div>
+                                  {parsed.address && (
+                                    <div className="bg-white/80 dark:bg-gray-800/80 p-2 rounded text-xs">
+                                      <div className="font-medium mb-1">Address:</div>
+                                      <div className="text-gray-700 dark:text-gray-300">{parsed.address}</div>
+                                    </div>
+                                  )}
+                                  {(parsed.latitude || parsed.longitude) && (
+                                    <div className="text-xs opacity-80">
+                                      Coordinates: {parsed.latitude ? `${parsed.latitude}` : 'N/A'}, {parsed.longitude ? `${parsed.longitude}` : 'N/A'}
+                                    </div>
+                                  )}
+                                  {parsed.name && (
+                                    <div className="text-xs opacity-80">
+                                      Location Name: {parsed.name}
+                                    </div>
+                                  )}
+                                  <a
+                                    href={`https://www.google.com/maps?q=${parsed.latitude},${parsed.longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs underline hover:opacity-80 inline-block mt-1"
+                                  >
+                                    View on Google Maps →
+                                  </a>
+                                </div>
+                              );
+                            }
+                          } catch (e) {
+                            // Not JSON, check if it's a location string pattern
+                            const locationPattern = /(?:location|address|coordinates?)[\s:]*([^\n]+)/i;
+                            const match = message.body.match(locationPattern);
+                            if (match) {
+                              return (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-lg">📍</span>
+                                    <span className="font-semibold">Location</span>
+                                  </div>
+                                  <div className="bg-white/80 dark:bg-gray-800/80 p-2 rounded text-xs">
+                                    {match[1]}
+                                  </div>
+                                </div>
+                              );
+                            }
+                          }
+                          // Regular text message
+                          return <div className="whitespace-pre-wrap">{message.body}</div>;
+                        })()}
                         <div className="flex items-center gap-2 mt-1">
                           <div
                             className={cn(
@@ -286,6 +357,11 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWi
                           {message.is_order && (
                             <Badge variant="secondary" className="text-xs h-4 px-1">
                               🍽️
+                            </Badge>
+                          )}
+                          {message.message_type === 'location' && (
+                            <Badge variant="secondary" className="text-xs h-4 px-1">
+                              📍
                             </Badge>
                           )}
                         </div>

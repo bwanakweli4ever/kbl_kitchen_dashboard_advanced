@@ -54,7 +54,7 @@ interface Order {
   ingredients: string[];
   spice_level: string;
   sauce: string;
-  food_total: number;
+  food_total: number | null;
   delivery_info: string;
   status: string;
   customer_total_orders: number;
@@ -63,6 +63,7 @@ interface Order {
   items?: string;
   drinks?: string;
   order_source?: string;
+  preset_name?: string;
 }
 
 export default function KitchenDashboard() {
@@ -77,6 +78,7 @@ export default function KitchenDashboard() {
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [showMultipleItems, setShowMultipleItems] = useState<Set<number>>(new Set());
   const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -351,8 +353,122 @@ export default function KitchenDashboard() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
+  const bulkUpdatePendingOrders = async () => {
+    if (!token || bulkUpdating) return;
+    
+    const confirmUpdate = window.confirm(
+      "Are you sure you want to update all 'pending' orders to 'received'? This action cannot be undone."
+    );
+    
+    if (!confirmUpdate) return;
+    
+    try {
+      setBulkUpdating(true);
+      setError(null);
+      setSuccessMessage(null);
+      
+      const response = await fetch("/api/orders/bulk-update-status", {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from_status: "pending",
+          to_status: "received",
+          notify_customers: false,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setSuccessMessage(
+          `✅ Successfully updated ${data.updated_count || 0} orders from 'pending' to 'received'`
+        );
+        setTimeout(() => setSuccessMessage(null), 5000);
+        // Refresh orders
+        await handleOrderStatusUpdated();
+      } else {
+        setError(data.error || "Failed to bulk update orders");
+      }
+    } catch (err) {
+      setError("Network error - check your connection");
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined || isNaN(amount)) {
+      return "0 RWF";
+    }
     return `${amount.toLocaleString()} RWF`;
+  };
+
+  // Get price from size (fallback when price is missing)
+  const getPriceFromSize = (size: string | null | undefined): number => {
+    if (!size) return 0;
+    const sizeLower = size.toLowerCase();
+    if (sizeLower.includes('medium')) return 6500;
+    if (sizeLower.includes('large')) return 7500;
+    if (sizeLower.includes('wrap')) return 7500;
+    if (sizeLower.includes('small')) return 6500;
+    return 0;
+  };
+
+  // Calculate total from items if food_total is missing
+  const calculateOrderTotal = (order: Order): number => {
+    // If food_total exists and is valid, use it
+    if (order.food_total !== null && order.food_total !== undefined && !isNaN(order.food_total) && order.food_total > 0) {
+      return order.food_total;
+    }
+
+    // Otherwise, calculate from items
+    try {
+      const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+      if (Array.isArray(items) && items.length > 0) {
+        let total = 0;
+        for (const item of items) {
+          // Use item price, or calculate from size, or use order-level size
+          let price = item.price || 0;
+          if (price === 0) {
+            price = getPriceFromSize(item.size || order.size);
+          }
+          const quantity = item.quantity || order.quantity || 1;
+          total += price * quantity;
+        }
+        
+        // If no items had prices, try using order-level size
+        if (total === 0 && order.size) {
+          const orderPrice = getPriceFromSize(order.size);
+          const orderQuantity = order.quantity || 1;
+          total = orderPrice * orderQuantity;
+        }
+        
+        // Also add drinks if any
+        if (order.drinks) {
+          const drinks = typeof order.drinks === 'string' ? JSON.parse(order.drinks) : order.drinks;
+          if (Array.isArray(drinks) && drinks.length > 0) {
+            for (const drink of drinks) {
+              const drinkPrice = drink.price || 1500;
+              const drinkQuantity = drink.quantity || 1;
+              total += drinkPrice * drinkQuantity;
+            }
+          }
+        }
+        return total > 0 ? total : 0;
+      } else if (order.size) {
+        // No items array, but we have order-level size
+        const orderPrice = getPriceFromSize(order.size);
+        const orderQuantity = order.quantity || 1;
+        return orderPrice * orderQuantity;
+      }
+    } catch (error) {
+      console.error('Error calculating order total:', error);
+    }
+
+    return 0;
   };
 
   const getSpiceLevel = (level: string | null) => {
@@ -427,18 +543,42 @@ export default function KitchenDashboard() {
     return categories;
   };
 
-  // Helper function to get bread/wrap choice
+  // Helper function to get bread/wrap choice - returns clean size names
   const getBreadChoice = (size: string | null | undefined) => {
-    if (!size || typeof size !== 'string') {
-      return '🍽️ Food Item';
+    // CRITICAL: Be very specific, no assumptions - use exact size value
+    if (!size || typeof size !== 'string' || size.trim() === '' || size === 'N/A' || size === 'N/a') {
+      // Only default if truly empty - don't assume Medium
+      return 'N/A';
     }
     
-    const lower = size.toLowerCase();
-    if (lower.includes('wrap')) return `🌯 ${size}`;
-    if (lower.includes('sandwich')) return `🥪 ${size}`;
-    if (lower.includes('burger')) return `🍔 ${size}`;
-    if (lower.includes('bread')) return `🍞 ${size}`;
-    return `🍽️ ${size}`;
+    const trimmedSize = size.trim();
+    const lower = trimmedSize.toLowerCase();
+    
+    // Exact matches first (most specific)
+    if (lower === 'wrap' || lower === 'small_wrap' || lower === 'sm_wrap') {
+      return 'Wrap';
+    }
+    if (lower === 'medium' || lower === 'med') {
+      return 'Medium';
+    }
+    if (lower === 'large' || lower === 'lg') {
+      return 'Large';
+    }
+    
+    // Then check if it contains the word (less specific but still valid)
+    if (lower.includes('wrap')) {
+      return 'Wrap';
+    }
+    if (lower.includes('medium')) {
+      return 'Medium';
+    }
+    if (lower.includes('large')) {
+      return 'Large';
+    }
+    
+    // If none match, return the original value capitalized (don't assume)
+    // This preserves values like "SHAWARMA_PROMAX" or other specific sizes
+    return trimmedSize.charAt(0).toUpperCase() + trimmedSize.slice(1);
   };
 
   const toggleMultipleItems = (orderId: number, event: React.MouseEvent) => {
@@ -667,6 +807,41 @@ export default function KitchenDashboard() {
             </div>
           ) : (
             <div className="relative">
+              {/* Bulk Update Button for Pending Orders */}
+              {orders.some(order => order.status.toLowerCase() === "pending") && (
+                <div className="flex items-center justify-center mb-3 sm:mb-4">
+                  <Button
+                    onClick={bulkUpdatePendingOrders}
+                    disabled={bulkUpdating}
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50 flex items-center gap-2 px-4 py-2 text-sm sm:text-base"
+                  >
+                    {bulkUpdating ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🔄</span>
+                        <span>Update All Pending Orders to Received</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+              
+              {/* Success/Error Messages */}
+              {successMessage && (
+                <div className="mb-3 sm:mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+                  <p className="text-green-700 text-sm font-medium">{successMessage}</p>
+                </div>
+              )}
+              {error && (
+                <div className="mb-3 sm:mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-center">
+                  <p className="text-red-700 text-sm font-medium">{error}</p>
+                </div>
+              )}
+              
               {/* Orders Count */}
               <div className="flex items-center justify-center mb-2 sm:mb-3 md:mb-4">
                 <div className="text-xs sm:text-sm text-gray-600 text-center px-3 py-2 bg-white/80 backdrop-blur-sm rounded-lg shadow-sm flex items-center gap-2">
@@ -719,7 +894,7 @@ export default function KitchenDashboard() {
                           
                           <div className="text-right">
                               <div className="text-lg sm:text-xl md:text-2xl font-bold text-green-600">
-                              {formatCurrency(order.food_total)}
+                              {formatCurrency(calculateOrderTotal(order))}
                             </div>
                               <div className="text-xs sm:text-sm text-gray-500">Total</div>
                             </div>
@@ -729,6 +904,76 @@ export default function KitchenDashboard() {
                             {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString()}
                           </div>
                         </div>
+                        
+                        {/* Order Type Badge - Show Preset Name or Custom */}
+                        {(() => {
+                          // Determine order type: preset or custom
+                          const isPreset = !!order.preset_name
+                          
+                          if (!isPreset) {
+                            // Custom order - show badge
+                            return (
+                              <div className="mb-3">
+                                <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 text-sm font-semibold">
+                                  🎨 Custom Order
+                                </Badge>
+                              </div>
+                            )
+                          }
+                          
+                          // For preset orders, show preset name with breakdown
+                          // Get preset details from order data
+                          const presetDetails = (() => {
+                            try {
+                              let items: any[] = [];
+                              if (order.items) {
+                                items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+                              }
+                              if (items.length > 0) {
+                                return {
+                                  ingredients: items[0].ingredients || order.ingredients || [],
+                                  sauce: items[0].sauce || order.sauce || 'None',
+                                  spice: items[0].spice_level || order.spice_level || 'None'
+                                };
+                              }
+                              return {
+                                ingredients: order.ingredients || [],
+                                sauce: order.sauce || 'None',
+                                spice: order.spice_level || 'None'
+                              };
+                            } catch (e) {
+                              return {
+                                ingredients: order.ingredients || [],
+                                sauce: order.sauce || 'None',
+                                spice: order.spice_level || 'None'
+                              };
+                            }
+                          })();
+                          
+                          return (
+                            <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-3 py-1 text-sm font-semibold">
+                                  📦 Preset: {order.preset_name}
+                                </Badge>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                {presetDetails.sauce && presetDetails.sauce !== 'None' && (
+                                  <div>
+                                    <div className="text-xs text-gray-600 mb-1">🍯 Sauce</div>
+                                    <div className="font-semibold text-gray-800 capitalize">{presetDetails.sauce.replace('-', ' ')}</div>
+                                  </div>
+                                )}
+                                {presetDetails.spice && presetDetails.spice !== 'None' && (
+                                  <div>
+                                    <div className="text-xs text-gray-600 mb-1">🌶️ Spice Level</div>
+                                    <div className="font-semibold text-gray-800 capitalize">{presetDetails.spice}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                         
                         {/* Customer Info */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
@@ -758,443 +1003,236 @@ export default function KitchenDashboard() {
                       </CardHeader>
 
                       <CardContent className="space-y-6 p-6 sm:p-7 md:p-8">
-                        {/* Food Item Details */}
-                        <div className="p-6 sm:p-7 space-y-5 bg-gray-50 rounded-xl">
-                          <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-3">
-                                <span className="text-xl sm:text-2xl">🍽️</span>
-                                <h4 className="font-bold text-base sm:text-lg text-gray-800">Food Items</h4>
-                              </div>
-                              {(order.items || order.drinks) && (
-                                <button
-                                  onClick={(e) => toggleMultipleItems(order.id, e)}
-                                  className="text-sm sm:text-base text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-2 touch-manipulation px-3 py-1.5 rounded-lg hover:bg-blue-50"
-                                  type="button"
-                                >
-                                  {showMultipleItems.has(order.id) ? 'Show Less' : 'Show More'}
-                                  <span className="text-sm">
-                                    {showMultipleItems.has(order.id) ? '▲' : '▼'}
-                                  </span>
-                                </button>
-                              )}
-                            </div>
-                            
-                            {/* Main Food Item */}
-                            <div className="space-y-4 mb-3">
-                              {/* Bread/Wrap Choice */}
-                              <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
-                                <span className="text-2xl">🍞</span>
-                                <div>
-                                  <div className="font-semibold text-orange-800">{getBreadChoice(order.size)}</div>
-                                  <div className="text-sm text-orange-600">Quantity: ×{order.quantity}</div>
-                                </div>
-                                </div>
-
-                              {/* Ingredients Categories */}
-                              {order.ingredients && order.ingredients.length > 0 && (
-                                <div className="space-y-3">
-                                  {(() => {
-                                    const categories = categorizeIngredients(order.ingredients);
-                                    return (
-                                      <>
-                                        {/* Proteins */}
-                                        {categories.proteins.length > 0 && (
-                                          <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                                            <div className="flex items-center gap-2 mb-2">
-                                              <span className="text-lg">🥩</span>
-                                              <span className="font-semibold text-red-800">Proteins</span>
-                              </div>
-                                            <div className="flex flex-wrap gap-1">
-                                              {categories.proteins.map((protein, idx) => (
-                                                <span key={idx} className="px-2 py-1 bg-red-100 text-red-700 text-sm rounded border border-red-300 capitalize">
-                                                  {protein.replace('-', ' ')}
-                                                </span>
-                                              ))}
-                                </div>
-                                </div>
-                                        )}
-
-                                        {/* Vegetables */}
-                                        {categories.vegetables.length > 0 && (
-                                          <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                                            <div className="flex items-center gap-2 mb-2">
-                                              <span className="text-lg">🥬</span>
-                                              <span className="font-semibold text-green-800">Vegetables</span>
-                              </div>
-                                            <div className="flex flex-wrap gap-1">
-                                              {categories.vegetables.map((veggie, idx) => (
-                                                <span key={idx} className="px-2 py-1 bg-green-100 text-green-700 text-sm rounded border border-green-300 capitalize">
-                                                  {veggie.replace('-', ' ')}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Sauces */}
-                                        {categories.sauces.length > 0 && (
-                                          <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                                            <div className="flex items-center gap-2 mb-2">
-                                              <span className="text-lg">🥫</span>
-                                              <span className="font-semibold text-yellow-800">Sauces</span>
-                                            </div>
-                                            <div className="flex flex-wrap gap-1">
-                                              {categories.sauces.map((sauce, idx) => (
-                                                <span key={idx} className="px-2 py-1 bg-yellow-100 text-yellow-700 text-sm rounded border border-yellow-300 capitalize">
-                                                  {sauce.replace('-', ' ')}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Other ingredients */}
-                                        {categories.other.length > 0 && (
-                                          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                            <div className="flex items-center gap-2 mb-2">
-                                              <span className="text-lg">➕</span>
-                                              <span className="font-semibold text-gray-800">Other</span>
-                                            </div>
-                                            <div className="flex flex-wrap gap-1">
-                                              {categories.other.map((other, idx) => (
-                                                <span key={idx} className="px-2 py-1 bg-gray-100 text-gray-700 text-sm rounded border border-gray-300 capitalize">
-                                                  {other.replace('-', ' ')}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-
-                              {/* Spice Level */}
-                              <div className="flex items-center gap-3 p-3 bg-orange-100 rounded-lg border border-orange-300">
-                                <span className="text-2xl">🔥</span>
-                                <div>
-                                  <div className="font-semibold text-orange-800">Spice Level</div>
-                                  <div className="text-sm text-orange-600">{order.spice_level || 'Not specified'}</div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Additional Items - Expandable */}
-                            {(order.items || order.drinks) && showMultipleItems.has(order.id) && (
-                              <div className="border-t border-gray-200 pt-4 space-y-3">
-                                {order.items && (
-                                  <div className="space-y-3">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-500 text-sm">🍽️</span>
-                                      <span className="text-sm font-semibold text-gray-700">Additional Orders:</span>
-                                    </div>
-                                    <div className="space-y-3">
-                                      {(() => {
-                                        try {
-                                          const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
-                                          if (Array.isArray(items) && items.length > 0) {
-                                            // Check if this is a single order (items array contains only the main order)
-                                            const isSingleOrder = items.length === 1 && 
-                                                               items[0].size === order.size && 
-                                                               items[0].spice_level === order.spice_level && 
-                                                               items[0].sauce === order.sauce &&
-                                                               JSON.stringify(items[0].ingredients?.sort()) === JSON.stringify(order.ingredients?.sort());
-
-                                            if (isSingleOrder) {
-                                              // This is a single order, don't show additional items section
-                                              return null;
-                                            }
-
-                                            // Count identical items to main order (excluding the main order itself)
-                                            const identicalCount = items.filter((item: any) => {
-                                              const isIdentical = item.size === order.size && 
-                                                                item.spice_level === order.spice_level && 
-                                                                item.sauce === order.sauce &&
-                                                                JSON.stringify(item.ingredients?.sort()) === JSON.stringify(order.ingredients?.sort());
-                                              return isIdentical;
-                                            }).length;
-
-                                            // Show summary if there are identical items
-                                            if (identicalCount > 0) {
-                                              return (
-                                                <>
-                                                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                      <span className="text-lg">📋</span>
-                                                      <span className="font-semibold text-blue-800">Order Summary</span>
-                                                    </div>
-                                                    <div className="text-sm text-blue-700">
-                                                      Main order + {identicalCount} additional identical item{identicalCount > 1 ? 's' : ''}
-                                                    </div>
-                                                    <div className="text-xs text-blue-600 mt-1">
-                                                      Total quantity: {order.quantity + identicalCount} × {getBreadChoice(order.size)}
-                                                    </div>
-                                                  </div>
-                                                  
-                                                  {items.map((item: any, idx: number) => {
-                                                    // Check if this item is significantly different from the main order
-                                                    const isDifferent = item.size !== order.size || 
-                                                                      item.spice_level !== order.spice_level || 
-                                                                      item.sauce !== order.sauce ||
-                                                                      JSON.stringify(item.ingredients?.sort()) !== JSON.stringify(order.ingredients?.sort());
-                                                    
-                                                    if (!isDifferent) {
-                                                      return null; // Skip duplicate items
-                                                    }
-
-                                                    return (
-                                                      <div key={idx} className="bg-white rounded-lg p-4 border-2 border-blue-200 shadow-sm">
-                                                        <div className="flex items-center justify-between mb-3">
-                                                          <div className="flex items-center gap-2">
-                                                            <span className="text-lg">🍽️</span>
-                                                            <span className="font-semibold text-gray-800">
-                                                              Additional Order {idx + 1}: {getBreadChoice(item.size || 'Food Item')}
-                                                  </span>
-                                                          </div>
-                                                          <span className="text-sm text-green-600 font-bold">
-                                                    {item.price ? `${item.price.toLocaleString()} RWF` : ''}
-                                                  </span>
-                                                </div>
-                                                        
-                                                        <div className="text-sm text-gray-600 mb-3">
-                                                  Qty: {item.quantity || 1} • Spice: {item.spice_level || 'No spice'} • Sauce: {item.sauce || 'No sauce'}
-                                                </div>
-                                                        
-                                                {item.ingredients && item.ingredients.length > 0 && (
-                                                          <div className="space-y-2">
-                                                            {(() => {
-                                                              const categories = categorizeIngredients(item.ingredients);
-                                                              return (
-                                                                <>
-                                                                  {/* Proteins */}
-                                                                  {categories.proteins.length > 0 && (
-                                                                    <div className="p-2 bg-red-50 rounded border border-red-200">
-                                                                      <div className="flex items-center gap-1 mb-1">
-                                                                        <span className="text-sm">🥩</span>
-                                                                        <span className="text-xs font-semibold text-red-700">Proteins</span>
-                                                                      </div>
-                                                  <div className="flex flex-wrap gap-1">
-                                                                        {categories.proteins.map((protein, ingIdx) => (
-                                                                          <span key={ingIdx} className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded border border-red-300 capitalize">
-                                                                            {protein.replace('-', ' ')}
-                                                      </span>
-                                                    ))}
-                                                                      </div>
-                                                                    </div>
-                                                                  )}
-
-                                                                  {/* Vegetables */}
-                                                                  {categories.vegetables.length > 0 && (
-                                                                    <div className="p-2 bg-green-50 rounded border border-green-200">
-                                                                      <div className="flex items-center gap-1 mb-1">
-                                                                        <span className="text-sm">🥬</span>
-                                                                        <span className="text-xs font-semibold text-green-700">Vegetables</span>
-                                                                      </div>
-                                                                      <div className="flex flex-wrap gap-1">
-                                                                        {categories.vegetables.map((veggie, ingIdx) => (
-                                                                          <span key={ingIdx} className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded border border-green-300 capitalize">
-                                                                            {veggie.replace('-', ' ')}
-                                                                          </span>
-                                                                        ))}
-                                                                      </div>
-                                                                    </div>
-                                                                  )}
-
-                                                                  {/* Sauces */}
-                                                                  {categories.sauces.length > 0 && (
-                                                                    <div className="p-2 bg-yellow-50 rounded border border-yellow-200">
-                                                                      <div className="flex items-center gap-1 mb-1">
-                                                                        <span className="text-sm">🥫</span>
-                                                                        <span className="text-xs font-semibold text-yellow-700">Sauces</span>
-                                                                      </div>
-                                                                      <div className="flex flex-wrap gap-1">
-                                                                        {categories.sauces.map((sauce, ingIdx) => (
-                                                                          <span key={ingIdx} className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded border border-yellow-300 capitalize">
-                                                                            {sauce.replace('-', ' ')}
-                                                                          </span>
-                                                                        ))}
-                                                                      </div>
-                                                                    </div>
-                                                                  )}
-
-                                                                  {/* Other ingredients */}
-                                                                  {categories.other.length > 0 && (
-                                                                    <div className="p-2 bg-gray-50 rounded border border-gray-200">
-                                                                      <div className="flex items-center gap-1 mb-1">
-                                                                        <span className="text-sm">➕</span>
-                                                                        <span className="text-xs font-semibold text-gray-700">Other</span>
-                                                                      </div>
-                                                                      <div className="flex flex-wrap gap-1">
-                                                                        {categories.other.map((other, ingIdx) => (
-                                                                          <span key={ingIdx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-300 capitalize">
-                                                                            {other.replace('-', ' ')}
-                                                                          </span>
-                                                                        ))}
-                                                                      </div>
-                                                                    </div>
-                                                                  )}
-                                                                </>
-                                                              );
-                                                            })()}
-                                                          </div>
-                                                        )}
-                                                      </div>
-                                                    );
-                                                  }).filter(Boolean)} {/* Remove null values */}
-                                                </>
-                                              );
-                                            } else {
-                                              // No identical items, show all items
-                                              return items.map((item: any, idx: number) => (
-                                                <div key={idx} className="bg-white rounded-lg p-4 border-2 border-blue-200 shadow-sm">
-                                                  <div className="flex items-center justify-between mb-3">
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="text-lg">🍽️</span>
-                                                      <span className="font-semibold text-gray-800">
-                                                        Additional Order {idx + 1}: {getBreadChoice(item.size || 'Food Item')}
-                                                      </span>
-                                                    </div>
-                                                    <span className="text-sm text-green-600 font-bold">
-                                                      {item.price ? `${item.price.toLocaleString()} RWF` : ''}
-                                                    </span>
-                                                  </div>
-                                                  
-                                                  <div className="text-sm text-gray-600 mb-3">
-                                                    Qty: {item.quantity || 1} • Spice: {item.spice_level || 'No spice'} • Sauce: {item.sauce || 'No sauce'}
-                                                  </div>
-                                                  
-                                                  {item.ingredients && item.ingredients.length > 0 && (
-                                                    <div className="space-y-2">
-                                                      {(() => {
-                                                        const categories = categorizeIngredients(item.ingredients);
-                                                        return (
-                                                          <>
-                                                            {/* Proteins */}
-                                                            {categories.proteins.length > 0 && (
-                                                              <div className="p-2 bg-red-50 rounded border border-red-200">
-                                                                <div className="flex items-center gap-1 mb-1">
-                                                                  <span className="text-sm">🥩</span>
-                                                                  <span className="text-xs font-semibold text-red-700">Proteins</span>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-1">
-                                                                  {categories.proteins.map((protein, ingIdx) => (
-                                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded border border-red-300 capitalize">
-                                                                      {protein.replace('-', ' ')}
-                                                                    </span>
-                                                                  ))}
-                                                                </div>
-                                                              </div>
-                                                            )}
-
-                                                            {/* Vegetables */}
-                                                            {categories.vegetables.length > 0 && (
-                                                              <div className="p-2 bg-green-50 rounded border border-green-200">
-                                                                <div className="flex items-center gap-1 mb-1">
-                                                                  <span className="text-sm">🥬</span>
-                                                                  <span className="text-xs font-semibold text-green-700">Vegetables</span>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-1">
-                                                                  {categories.vegetables.map((veggie, ingIdx) => (
-                                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded border border-green-300 capitalize">
-                                                                      {veggie.replace('-', ' ')}
-                                                                    </span>
-                                                                  ))}
-                                                                </div>
-                                                              </div>
-                                                            )}
-
-                                                            {/* Sauces */}
-                                                            {categories.sauces.length > 0 && (
-                                                              <div className="p-2 bg-yellow-50 rounded border border-yellow-200">
-                                                                <div className="flex items-center gap-1 mb-1">
-                                                                  <span className="text-sm">🥫</span>
-                                                                  <span className="text-xs font-semibold text-yellow-700">Sauces</span>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-1">
-                                                                  {categories.sauces.map((sauce, ingIdx) => (
-                                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded border border-yellow-300 capitalize">
-                                                                      {sauce.replace('-', ' ')}
-                                                                    </span>
-                                                                  ))}
-                                                                </div>
-                                                              </div>
-                                                            )}
-
-                                                            {/* Other ingredients */}
-                                                            {categories.other.length > 0 && (
-                                                              <div className="p-2 bg-gray-50 rounded border border-gray-200">
-                                                                <div className="flex items-center gap-1 mb-1">
-                                                                  <span className="text-sm">➕</span>
-                                                                  <span className="text-xs font-semibold text-gray-700">Other</span>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-1">
-                                                                  {categories.other.map((other, ingIdx) => (
-                                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-300 capitalize">
-                                                                      {other.replace('-', ' ')}
-                                                                    </span>
-                                                                  ))}
-                                                                </div>
-                                                              </div>
-                                                            )}
-                                                          </>
-                                                        );
-                                                      })()}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            ));
-                                            }
-                                          }
-                                          return <span className="text-xs text-gray-600">{order.items}</span>;
-                                        } catch (error) {
-                                          return <span className="text-xs text-gray-600">{order.items}</span>;
-                                        }
-                                      })()}
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {order.drinks && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-500 text-xs">🥤</span>
-                                      <span className="text-xs font-medium text-gray-700">Drinks:</span>
-                                    </div>
-                                    <div className="pl-4 space-y-2">
-                                      {(() => {
-                                        try {
-                                          const drinks = typeof order.drinks === 'string' ? JSON.parse(order.drinks) : order.drinks;
-                                          if (Array.isArray(drinks)) {
-                                            return drinks.map((drink, idx) => (
-                                              <div key={idx} className="bg-blue-50 rounded p-2 border border-blue-200">
-                                                <div className="flex items-center justify-between mb-1">
-                                                  <span className="text-xs font-medium text-blue-800">
-                                                    {drink.name || drink.size || 'Drink'}
-                                                  </span>
-                                                  <span className="text-xs text-blue-600 font-medium">
-                                                    {drink.price ? `${drink.price.toLocaleString()} RWF` : ''}
-                                                  </span>
-                                                </div>
-                                                <div className="text-xs text-blue-600">
-                                                  Qty: {drink.quantity || 1}
-                                                </div>
-                                              </div>
-                                            ));
-                                          }
-                                          return <span className="text-xs text-gray-600">{order.drinks}</span>;
-                                        } catch (error) {
-                                          return <span className="text-xs text-gray-600">{order.drinks}</span>;
-                                        }
-                                      })()}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                        {/* Food Items - Table Format */}
+                        <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
+                          <div className="flex items-center gap-3 mb-4">
+                            <span className="text-xl sm:text-2xl">🍽️</span>
+                            <h4 className="font-bold text-base sm:text-lg text-gray-800">Food Items</h4>
                           </div>
+                          
+                          {/* Parse and display all items */}
+                          {(() => {
+                            try {
+                              // Parse items from JSON if it's a string
+                              let items: any[] = [];
+                              if (order.items) {
+                                items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+                                if (!Array.isArray(items)) {
+                                  items = [];
+                                }
+                              }
+                              
+                              // Debug logging
+                              console.log('Order items:', order.items);
+                              console.log('Parsed items:', items);
+                              console.log('Order-level fields:', {
+                                size: order.size,
+                                ingredients: order.ingredients,
+                                spice_level: order.spice_level,
+                                sauce: order.sauce,
+                                quantity: order.quantity
+                              });
+                              
+                              // If no items array or empty, create a single item from order-level fields
+                              if (items.length === 0) {
+                                // Create a single item from order-level data
+                                const orderIngredients = Array.isArray(order.ingredients) 
+                                  ? order.ingredients 
+                                  : (order.ingredients ? [order.ingredients] : []);
+                                const orderSauce = order.sauce || 'None';
+                                const orderSpice = order.spice_level || 'None';
+                                
+                                // Create a single item from order data
+                                items = [{
+                                  size: order.size || '',
+                                  quantity: order.quantity || 1,
+                                  ingredients: orderIngredients,
+                                  spice_level: orderSpice,
+                                  sauce: orderSauce,
+                                  price: 0
+                                }];
+                              } else {
+                                // Ensure each item has all required fields, fallback to order-level if missing
+                                items = items.map((item: any) => ({
+                                  size: item.size || order.size || '',
+                                  quantity: item.quantity || order.quantity || 1,
+                                  ingredients: (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0) 
+                                    ? item.ingredients 
+                                    : (Array.isArray(order.ingredients) && order.ingredients.length > 0 
+                                        ? order.ingredients 
+                                        : []),
+                                  spice_level: (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
+                                    ? item.spice_level
+                                    : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== ''
+                                        ? order.spice_level
+                                        : 'None'),
+                                  sauce: (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '')
+                                    ? item.sauce
+                                    : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== ''
+                                        ? order.sauce
+                                        : 'None'),
+                                  price: item.price || 0
+                                }));
+                              }
+                              
+                              // If still no items after processing, show empty state
+                              if (items.length === 0) {
+                                return (
+                                  <div className="text-center p-4 text-gray-500 italic">No items found</div>
+                                );
+                              }
+                              
+                              // Display all items in table format
+                              return (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full border-collapse">
+                                    <thead>
+                                      <tr className="bg-gradient-to-r from-green-50 to-blue-50 border-b-2 border-gray-300">
+                                        <th className="text-left p-3 text-xs sm:text-sm font-bold text-gray-700">#</th>
+                                        <th className="text-left p-3 text-xs sm:text-sm font-bold text-gray-700">Size</th>
+                                        <th className="text-left p-3 text-xs sm:text-sm font-bold text-gray-700">Qty</th>
+                                        <th className="text-left p-3 text-xs sm:text-sm font-bold text-gray-700">Ingredients</th>
+                                        <th className="text-left p-3 text-xs sm:text-sm font-bold text-gray-700">Spice</th>
+                                        <th className="text-left p-3 text-xs sm:text-sm font-bold text-gray-700">Sauce</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {items.map((item: any, idx: number) => {
+                                        // Get ingredients - ensure it's always an array
+                                        const itemIngredients: string[] = Array.isArray(item.ingredients) && item.ingredients.length > 0
+                                          ? item.ingredients
+                                          : (Array.isArray(order.ingredients) && order.ingredients.length > 0
+                                              ? order.ingredients
+                                              : []);
+                                        
+                                        // Get size - prefer item size, fallback to order size, default to 'Medium'
+                                        const rawSize = item.size || order.size;
+                                        const itemSize = getBreadChoice(rawSize);
+                                        const itemSpice = (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
+                                          ? item.spice_level
+                                          : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== ''
+                                              ? order.spice_level
+                                              : 'None');
+                                        const itemSauce = (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '')
+                                          ? item.sauce
+                                          : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== ''
+                                              ? order.sauce
+                                              : 'None');
+                                        
+                                        return (
+                                          <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
+                                            <td className="p-3 text-xs sm:text-sm font-semibold text-gray-600">{idx + 1}</td>
+                                            <td className="p-3 text-xs sm:text-sm font-semibold text-gray-800">
+                                              {itemSize}
+                                            </td>
+                                            <td className="p-3 text-xs sm:text-sm text-gray-700">×{item.quantity || order.quantity || 1}</td>
+                                            <td className="p-3 text-xs sm:text-sm">
+                                              {itemIngredients.length > 0 ? (
+                                                <div className="flex flex-wrap gap-1">
+                                                  {itemIngredients.map((ing: string, ingIdx: number) => (
+                                                    <span key={ingIdx} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded capitalize">
+                                                      {ing.replace('-', ' ')}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <span className="text-gray-400 text-xs italic">No ingredients listed</span>
+                                              )}
+                                            </td>
+                                            <td className="p-3 text-xs sm:text-sm text-gray-700 capitalize">
+                                              {itemSpice}
+                                            </td>
+                                            <td className="p-3 text-xs sm:text-sm text-gray-700 capitalize">
+                                              {itemSauce !== 'None' ? itemSauce.replace('-', ' ') : 'None'}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            } catch (error) {
+                              console.error('Error parsing items:', error);
+                              return (
+                                <div className="text-center p-4 text-red-600 text-sm">
+                                  Error displaying items. Showing legacy format.
+                                </div>
+                              );
+                            }
+                          })()}
                         </div>
+
+                        {/* Drinks Section - Always show */}
+                        {(() => {
+                          try {
+                            let drinks: any[] = [];
+                            if (order.drinks) {
+                              if (typeof order.drinks === 'string') {
+                                try {
+                                  drinks = JSON.parse(order.drinks);
+                                } catch (e) {
+                                  console.error('Error parsing drinks JSON:', e, order.drinks);
+                                  drinks = [];
+                                }
+                              } else if (Array.isArray(order.drinks)) {
+                                drinks = order.drinks;
+                              }
+                            }
+                            
+                            // Clean up drink names (remove leading commas, trim whitespace)
+                            drinks = drinks.map((drink: any) => ({
+                              ...drink,
+                              name: drink.name ? drink.name.replace(/^,\s*/, '').trim() : 'Drink'
+                            }));
+                            
+                            console.log('Parsed drinks:', drinks);
+                            
+                            return (
+                              <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <span className="text-xl sm:text-2xl">🥤</span>
+                                  <h4 className="font-bold text-base sm:text-lg text-gray-800">Drinks</h4>
+                                </div>
+                                {Array.isArray(drinks) && drinks.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {drinks.map((drink: any, idx: number) => (
+                                      <div key={idx} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-lg">🥤</span>
+                                          <div>
+                                            <div className="font-semibold text-gray-800">{drink.name || 'Drink'}</div>
+                                            <div className="text-xs text-gray-600">Quantity: ×{drink.quantity || 1}</div>
+                                          </div>
+                                        </div>
+                                        <div className="text-sm font-semibold text-green-600">
+                                          {drink.price ? `${drink.price.toLocaleString()} RWF` : '1,500 RWF'}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4 text-gray-500 text-sm italic">
+                                    None
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          } catch (error) {
+                            console.error('Error displaying drinks:', error, order.drinks);
+                            return (
+                              <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <span className="text-xl sm:text-2xl">🥤</span>
+                                  <h4 className="font-bold text-base sm:text-lg text-gray-800">Drinks</h4>
+                                </div>
+                                <div className="text-center py-4 text-gray-500 text-sm italic">
+                                  None
+                                </div>
+                              </div>
+                            );
+                          }
+                        })()}
 
                         {/* Delivery Info */}
                         {order.delivery_info && (

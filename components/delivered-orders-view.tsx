@@ -17,7 +17,7 @@ interface Order {
   ingredients: string[]
   spice_level: string
   sauce: string
-  food_total: number
+  food_total: number | null
   delivery_info: string
   status: string
   customer_total_orders: number
@@ -81,7 +81,10 @@ export function DeliveredOrdersView({ token }: DeliveredOrdersViewProps) {
     }
   }, [token])
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined || isNaN(amount)) {
+      return "0 RWF";
+    }
     return `${amount.toLocaleString()} RWF`
   }
 
