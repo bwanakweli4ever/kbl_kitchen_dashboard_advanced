@@ -353,6 +353,31 @@ export default function KitchenDashboard() {
     }
   };
 
+  const requestLocation = async (orderId: number, waId: string) => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}/request-location`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSuccessMessage(`✅ Location request sent to customer ${waId}`);
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || "Failed to send location request");
+        setTimeout(() => setError(null), 5000);
+      }
+    } catch (err) {
+      setError("Network error - check your connection");
+      setTimeout(() => setError(null), 5000);
+    }
+  };
+
   const bulkUpdatePendingOrders = async () => {
     if (!token || bulkUpdating) return;
     
@@ -544,41 +569,107 @@ export default function KitchenDashboard() {
   };
 
   // Helper function to get bread/wrap choice - returns clean size names
-  const getBreadChoice = (size: string | null | undefined) => {
-    // CRITICAL: Be very specific, no assumptions - use exact size value
-    if (!size || typeof size !== 'string' || size.trim() === '' || size === 'N/A' || size === 'N/a') {
-      // Only default if truly empty - don't assume Medium
-      return 'N/A';
+  // Valid product names that should be displayed
+  const VALID_PRODUCT_NAMES = [
+    'Large Sandwich',
+    'Medium Sandwich',
+    'Small Sandwich',
+    'Fresh Wrap',
+    'Regular Wrap',
+    'Signature Wrap',
+    'Shawarma Pro Max',
+    'Shawarma'
+  ];
+  
+  const getBreadChoice = (size: string | null | undefined, item?: any) => {
+    // CRITICAL: The size field now contains the product display name (e.g., "Fresh Wrap", "Regular Wrap", "Large Sandwich")
+    // We should validate and return it as-is, or map legacy sizes to display names
+    
+    let actualSize = size;
+    
+    // If size is N/A/null/empty, try to extract from item data
+    if (!actualSize || typeof actualSize !== 'string' || actualSize.trim() === '' || actualSize === 'N/A' || actualSize === 'N/a') {
+      // Try to extract from item if available
+      if (item) {
+        // Check if item has a valid size
+        if (item.size && item.size !== 'N/A' && item.size.trim() !== '') {
+          actualSize = item.size;
+        }
+      }
+      
+      // If still no size, return error message
+      if (!actualSize || actualSize === 'N/A' || actualSize.trim() === '') {
+        return '⚠️ Product Name Missing';
+      }
     }
     
-    const trimmedSize = size.trim();
+    const trimmedSize = actualSize.trim();
     const lower = trimmedSize.toLowerCase();
     
-    // Exact matches first (most specific)
+    // Check if it's already a valid product name
+    for (const productName of VALID_PRODUCT_NAMES) {
+      if (lower === productName.toLowerCase()) {
+        return productName; // Return the exact valid product name
+      }
+    }
+    
+    // Map legacy size codes to product names
     if (lower === 'wrap' || lower === 'small_wrap' || lower === 'sm_wrap') {
-      return 'Wrap';
+      return 'Fresh Wrap'; // Default wrap is Fresh Wrap
     }
     if (lower === 'medium' || lower === 'med') {
-      return 'Medium';
+      return 'Medium Sandwich';
     }
     if (lower === 'large' || lower === 'lg') {
-      return 'Large';
+      return 'Large Sandwich';
+    }
+    if (lower === 'shawarma_promax' || lower === 'shawarma_pro_max') {
+      return 'Shawarma Pro Max';
     }
     
-    // Then check if it contains the word (less specific but still valid)
-    if (lower.includes('wrap')) {
-      return 'Wrap';
+    // Try partial matching for valid product names
+    if (lower.includes('fresh') && lower.includes('wrap')) {
+      return 'Fresh Wrap';
     }
-    if (lower.includes('medium')) {
-      return 'Medium';
+    if (lower.includes('regular') && lower.includes('wrap')) {
+      return 'Regular Wrap';
     }
-    if (lower.includes('large')) {
-      return 'Large';
+    if (lower.includes('signature') && lower.includes('wrap')) {
+      return 'Signature Wrap';
+    }
+    if (lower.includes('large') && lower.includes('sandwich')) {
+      return 'Large Sandwich';
+    }
+    if (lower.includes('medium') && lower.includes('sandwich')) {
+      return 'Medium Sandwich';
+    }
+    if (lower.includes('small') && lower.includes('sandwich')) {
+      return 'Small Sandwich';
+    }
+    if (lower.includes('shawarma') && lower.includes('pro') && lower.includes('max')) {
+      return 'Shawarma Pro Max';
+    }
+    if (lower.includes('shawarma')) {
+      return 'Shawarma';
     }
     
-    // If none match, return the original value capitalized (don't assume)
-    // This preserves values like "SHAWARMA_PROMAX" or other specific sizes
+    // If none match, return the original value capitalized (might be a valid product name we don't know about)
     return trimmedSize.charAt(0).toUpperCase() + trimmedSize.slice(1);
+  };
+  
+  // Format the product name for display with emoji
+  const getSizeDisplayName = (productName: string) => {
+    const lower = productName.toLowerCase();
+    if (lower.includes('large') && lower.includes('sandwich')) return 'Large Sandwich 🥪';
+    if (lower.includes('medium') && lower.includes('sandwich')) return 'Medium Sandwich 🥪';
+    if (lower.includes('small') && lower.includes('sandwich')) return 'Small Sandwich 🥪';
+    if (lower.includes('fresh') && lower.includes('wrap')) return 'Fresh Wrap 🌯';
+    if (lower.includes('regular') && lower.includes('wrap')) return 'Regular Wrap 🌯';
+    if (lower.includes('signature') && lower.includes('wrap')) return 'Signature Wrap 🌯';
+    if (lower.includes('shawarma') && lower.includes('pro') && lower.includes('max')) return 'Shawarma Pro Max 🥙';
+    if (lower.includes('shawarma')) return 'Shawarma 🥙';
+    // If it's already a valid product name, just add emoji
+    return productName; // Return as-is (will be formatted by getBreadChoice)
   };
 
   const toggleMultipleItems = (orderId: number, event: React.MouseEvent) => {
@@ -1004,15 +1095,15 @@ export default function KitchenDashboard() {
 
                       <CardContent className="space-y-6 p-6 sm:p-7 md:p-8">
                         {/* Food Items - Table Format */}
-                        <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
+                          <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
                           <div className="flex items-center gap-3 mb-4">
-                            <span className="text-xl sm:text-2xl">🍽️</span>
-                            <h4 className="font-bold text-base sm:text-lg text-gray-800">Food Items</h4>
-                          </div>
-                          
+                                <span className="text-xl sm:text-2xl">🍽️</span>
+                                <h4 className="font-bold text-base sm:text-lg text-gray-800">Food Items</h4>
+                            </div>
+                            
                           {/* Parse and display all items */}
-                          {(() => {
-                            try {
+                                      {(() => {
+                                        try {
                               // Parse items from JSON if it's a string
                               let items: any[] = [];
                               if (order.items) {
@@ -1083,7 +1174,7 @@ export default function KitchenDashboard() {
                               }
                               
                               // Display all items in table format
-                              return (
+                                                    return (
                                 <div className="overflow-x-auto">
                                   <table className="w-full border-collapse">
                                     <thead>
@@ -1105,36 +1196,100 @@ export default function KitchenDashboard() {
                                               ? order.ingredients
                                               : []);
                                         
-                                        // Get size - prefer item size, fallback to order size, default to 'Medium'
-                                        const rawSize = item.size || order.size;
-                                        const itemSize = getBreadChoice(rawSize);
-                                        const itemSpice = (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
+                                        // Get product name - prefer item size, fallback to order size
+                                        // CRITICAL: The size field now contains the product display name
+                                        let rawSize = item.size || order.size;
+                                        // If size is N/A, try multiple fallbacks
+                                        if (!rawSize || rawSize === 'N/A' || rawSize.trim() === '') {
+                                          // Try to get from item directly
+                                          rawSize = item.size;
+                                          // If still N/A, try order size
+                                          if (!rawSize || rawSize === 'N/A') {
+                                            rawSize = order.size;
+                                          }
+                                        }
+                                        // Get the validated product name
+                                        let productName = getBreadChoice(rawSize, item);
+                                        
+                                        // CRITICAL: Never show "Custom Item" - validate against known product names
+                                        if (productName === '⚠️ Product Name Missing' || productName === 'Size Missing') {
+                                          // Try to infer from other data, but use a valid product name
+                                          // Check if we can infer from size patterns
+                                          const sizeLower = (rawSize || '').toLowerCase();
+                                          if (sizeLower.includes('wrap')) {
+                                            productName = 'Fresh Wrap'; // Default wrap
+                                          } else if (sizeLower.includes('large')) {
+                                            productName = 'Large Sandwich';
+                                          } else if (sizeLower.includes('medium')) {
+                                            productName = 'Medium Sandwich';
+                                          } else if (sizeLower.includes('small')) {
+                                            productName = 'Small Sandwich';
+                                          } else if (sizeLower.includes('shawarma')) {
+                                            productName = 'Shawarma Pro Max';
+                                          } else {
+                                            // Last resort: show error but don't use "Custom Item"
+                                            productName = '⚠️ Product Name Missing';
+                                          }
+                                        }
+                                        
+                                        // Format the product name for display with emoji
+                                        const displaySize = getSizeDisplayName(productName);
+                                        
+                                        // Clean spice - remove any "Drinks:" contamination
+                                        let itemSpice = (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
                                           ? item.spice_level
                                           : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== ''
                                               ? order.spice_level
                                               : 'None');
-                                        const itemSauce = (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '')
+                                        // Remove "Drinks:" text from spice
+                                        itemSpice = itemSpice.split('Drinks:')[0].split('🥤')[0].trim();
+                                        
+                                        // Clean sauce - remove "Drinks:" and corrupted characters
+                                        let itemSauce = (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '')
                                           ? item.sauce
                                           : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== ''
                                               ? order.sauce
                                               : 'None');
+                                        // CRITICAL: Remove price information contamination
+                                        // Remove patterns like "Regular Wrap x1 - Price 6500 RWF each - Total 6500 RWF"
+                                        itemSauce = itemSauce
+                                          .replace(/\s*[A-Za-z\s]+Wrap\s*x\d+.*?Price.*?RWF.*?/gi, '')  // Remove wrap price info
+                                          .replace(/\s*[A-Za-z\s]+Sandwich\s*x\d+.*?Price.*?RWF.*?/gi, '')  // Remove sandwich price info
+                                          .replace(/\s*Price\s*[\d,]+\s*RWF.*?/gi, '')  // Remove "Price X RWF"
+                                          .replace(/\s*Total\s*[\d,]+\s*RWF.*?/gi, '')  // Remove "Total X RWF"
+                                          .replace(/\s*x\d+.*?/gi, '')  // Remove "x1", "x2", etc.
+                                          .replace(/\s*Ingredients.*?$/gi, '')  // Remove "Ingredients" text
+                                          .split('Drinks:')[0]  // Remove everything after "Drinks:"
+                                          .split('🥤')[0]       // Remove everything after drinks emoji
+                                          .split('Food Total:')[0]  // Remove "Food Total:"
+                                          .split('Delivery:')[0]    // Remove "Delivery:"
+                                          .replace(/\s*(Regular|Fresh|Signature)\s+Wrap\s*/gi, '')  // Remove product names
+                                          .replace(/\s*(Large|Medium|Small)\s+Sandwich\s*/gi, '')  // Remove product names
+                                          .replace(/\s*Shawarma\s*(Pro\s+Max)?\s*/gi, '')  // Remove product names
+                                          .replace(/[^\w\s-]/g, '')  // Remove corrupted emoji characters but keep word chars, spaces, hyphens
+                                          .replace(/\s+/g, ' ')      // Normalize whitespace
+                                          .trim();
+                                        // If sauce is empty after cleaning, set to 'None'
+                                        if (!itemSauce || itemSauce === '') {
+                                          itemSauce = 'None';
+                                        }
                                         
-                                        return (
+                                                              return (
                                           <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
                                             <td className="p-3 text-xs sm:text-sm font-semibold text-gray-600">{idx + 1}</td>
                                             <td className="p-3 text-xs sm:text-sm font-semibold text-gray-800">
-                                              {itemSize}
+                                              {displaySize}
                                             </td>
                                             <td className="p-3 text-xs sm:text-sm text-gray-700">×{item.quantity || order.quantity || 1}</td>
                                             <td className="p-3 text-xs sm:text-sm">
                                               {itemIngredients.length > 0 ? (
-                                                <div className="flex flex-wrap gap-1">
+                                                  <div className="flex flex-wrap gap-1">
                                                   {itemIngredients.map((ing: string, ingIdx: number) => (
                                                     <span key={ingIdx} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded capitalize">
                                                       {ing.replace('-', ' ')}
-                                                    </span>
-                                                  ))}
-                                                </div>
+                                                      </span>
+                                                    ))}
+                                                                      </div>
                                               ) : (
                                                 <span className="text-gray-400 text-xs italic">No ingredients listed</span>
                                               )}
@@ -1150,21 +1305,21 @@ export default function KitchenDashboard() {
                                       })}
                                     </tbody>
                                   </table>
-                                </div>
+                                                                      </div>
                               );
                             } catch (error) {
                               console.error('Error parsing items:', error);
                               return (
                                 <div className="text-center p-4 text-red-600 text-sm">
                                   Error displaying items. Showing legacy format.
-                                </div>
+                                                                      </div>
                               );
                             }
-                          })()}
-                        </div>
-
+                                                            })()}
+                                                  </div>
+                                                  
                         {/* Drinks Section - Always show */}
-                        {(() => {
+                                                      {(() => {
                           try {
                             let drinks: any[] = [];
                             if (order.drinks) {
@@ -1188,12 +1343,12 @@ export default function KitchenDashboard() {
                             
                             console.log('Parsed drinks:', drinks);
                             
-                            return (
+                                                        return (
                               <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
                                 <div className="flex items-center gap-3 mb-4">
                                   <span className="text-xl sm:text-2xl">🥤</span>
                                   <h4 className="font-bold text-base sm:text-lg text-gray-800">Drinks</h4>
-                                </div>
+                                                                </div>
                                 {Array.isArray(drinks) && drinks.length > 0 ? (
                                   <div className="space-y-2">
                                     {drinks.map((drink: any, idx: number) => (
@@ -1203,49 +1358,116 @@ export default function KitchenDashboard() {
                                           <div>
                                             <div className="font-semibold text-gray-800">{drink.name || 'Drink'}</div>
                                             <div className="text-xs text-gray-600">Quantity: ×{drink.quantity || 1}</div>
-                                          </div>
-                                        </div>
+                                                                </div>
+                                                              </div>
                                         <div className="text-sm font-semibold text-green-600">
                                           {drink.price ? `${drink.price.toLocaleString()} RWF` : '1,500 RWF'}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
+                                                                </div>
+                                                                </div>
+                                                                  ))}
+                                                                </div>
                                 ) : (
                                   <div className="text-center py-4 text-gray-500 text-sm italic">
                                     None
-                                  </div>
-                                )}
-                              </div>
+                                                              </div>
+                                                            )}
+                                                                </div>
                             );
-                          } catch (error) {
+                                        } catch (error) {
                             console.error('Error displaying drinks:', error, order.drinks);
                             return (
                               <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
                                 <div className="flex items-center gap-3 mb-4">
                                   <span className="text-xl sm:text-2xl">🥤</span>
                                   <h4 className="font-bold text-base sm:text-lg text-gray-800">Drinks</h4>
-                                </div>
+                                    </div>
                                 <div className="text-center py-4 text-gray-500 text-sm italic">
                                   None
+                                  </div>
+                                    </div>
+                            );
+                                        }
+                                      })()}
+
+                        {/* Delivery Info */}
+                        {(() => {
+                          // Check if location is valid - accept coordinates, addresses, or any non-default value
+                          const deliveryInfo = order.delivery_info || '';
+                          const deliveryInfoLower = deliveryInfo.toLowerCase().trim();
+                          
+                          const isInvalidLocation = 
+                            deliveryInfoLower === '' ||
+                            deliveryInfoLower === 'to be arranged with delivery person' ||
+                            deliveryInfoLower === 'location shared' ||
+                            deliveryInfoLower === 'none';
+                          
+                          // Check if it looks like coordinates (e.g., "-1.9441,30.0619" or contains "lat" and "lng")
+                          const looksLikeCoordinates = /^-?\d+\.?\d*[,,\s]+-?\d+\.?\d*$/.test(deliveryInfo.replace(/\s/g, '')) ||
+                            /lat.*lng/i.test(deliveryInfo) ||
+                            /^-?\d+\.?\d*,\s*-?\d+\.?\d*$/.test(deliveryInfo);
+                          
+                          if (!isInvalidLocation || looksLikeCoordinates) {
+                            // Format coordinates for Google Maps
+                            let mapsQuery = deliveryInfo;
+                            if (looksLikeCoordinates) {
+                              // Extract coordinates from "Lat: X, Lng: Y" format
+                              const coordMatch = deliveryInfo.match(/(?:lat|latitude)[:\s]+(-?\d+\.?\d*)[,\s]+(?:lng|longitude)[:\s]+(-?\d+\.?\d*)/i);
+                              if (coordMatch) {
+                                mapsQuery = `${coordMatch[1]},${coordMatch[2]}`;
+                              } else {
+                                // Already in "X,Y" format - clean it up
+                                mapsQuery = deliveryInfo.replace(/\s/g, '').replace(/lat:?\s*/gi, '').replace(/lng:?\s*/gi, '');
+                              }
+                            }
+                            
+                            return (
+                              <div className="bg-white border-2 border-blue-200 rounded-lg p-3 shadow-sm">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <span className="text-lg">🚚</span>
+                                  </div>
+                                  <div className="flex-1">
+                                    <h3 className="text-lg font-bold text-blue-900">Delivery Information</h3>
+                                    <div className="text-sm text-blue-700 mt-2 bg-blue-50 p-2 rounded-lg border border-blue-200">
+                                      {deliveryInfo}
+                                    </div>
+                                    <a
+                                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                    >
+                                      <span>📍</span>
+                                      Open in Google Maps
+                                    </a>
+                                  </div>
                                 </div>
                               </div>
                             );
                           }
+                          return null;
                         })()}
-
-                        {/* Delivery Info */}
-                        {order.delivery_info && (
-                          <div className="bg-white border-2 border-blue-200 rounded-lg p-3 shadow-sm">
+                        {(!order.delivery_info || 
+                          order.delivery_info.trim() === '' || 
+                          order.delivery_info.toLowerCase() === 'to be arranged with delivery person' ||
+                          order.delivery_info.toLowerCase() === 'location shared') && (
+                          <div className="bg-white border-2 border-orange-200 rounded-lg p-3 shadow-sm">
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-lg">🚚</span>
+                              <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                                <span className="text-lg">⚠️</span>
                               </div>
-                              <div>
-                                <h3 className="text-lg font-bold text-blue-900">Delivery Information</h3>
-                                <div className="text-sm text-blue-700 mt-2 bg-blue-50 p-2 rounded-lg border border-blue-200">
-                                  {order.delivery_info}
+                              <div className="flex-1">
+                                <h3 className="text-lg font-bold text-orange-900">Location Required</h3>
+                                <div className="text-sm text-orange-700 mt-2 bg-orange-50 p-2 rounded-lg border border-orange-200">
+                                  ⚠️ Please contact customer to get delivery location
                                 </div>
+                                <Button
+                                  onClick={() => requestLocation(order.id, order.wa_id)}
+                                  className="mt-3 w-full sm:w-auto inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+                                >
+                                  <span>📍</span>
+                                  Request Location from Customer
+                                </Button>
                               </div>
                             </div>
                           </div>

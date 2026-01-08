@@ -330,9 +330,18 @@ export function DeliveredOrdersView({ token }: DeliveredOrdersViewProps) {
                 {order.delivery_info && (
                   <div>
                     <h4 className="font-semibold text-blue-700 mb-1 text-sm">🚚 Delivery</h4>
-                    <div className="bg-blue-50 p-2 rounded text-xs border border-blue-200 text-blue-800">
+                    <div className="bg-blue-50 p-2 rounded text-xs border border-blue-200 text-blue-800 mb-2">
                       {order.delivery_info}
                     </div>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_info)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors font-medium"
+                    >
+                      <span>📍</span>
+                      Open in Maps
+                    </a>
                   </div>
                 )}
 
