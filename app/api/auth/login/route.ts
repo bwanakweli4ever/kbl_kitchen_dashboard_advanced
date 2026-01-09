@@ -5,23 +5,33 @@ const API_BASE_URL = process.env.WHATSAPP_API_URL || config.api.baseUrl
 
 
 export async function POST(request: NextRequest) {
+  // Ensure API_BASE_URL doesn't have trailing slash
+  const baseUrl = API_BASE_URL.replace(/\/$/, '')
+  const loginUrl = `${baseUrl}/auth/login`
+  
   try {
     const { apiKey } = await request.json()
 
     if (!apiKey) {
       return NextResponse.json({ error: "API key is required" }, { status: 400 })
     }
-
+    
+    console.log("🔐 Login attempt:", {
+      url: loginUrl,
+      apiKeyLength: apiKey.length,
+      apiKeyPrefix: apiKey.substring(0, 4) + "..."
+    })
 
     // Add timeout and better error handling
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), config.api.timeout)
 
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    const response = await fetch(loginUrl, {
       method: "POST",
       headers: {
-        "x-api-key": apiKey,
+        "x-api-key": apiKey.trim(),
         "Content-Type": "application/json",
+        "accept": "application/json",
       },
       signal: controller.signal,
     })
@@ -56,14 +66,35 @@ export async function POST(request: NextRequest) {
         success: true,
       })
     } else {
-      console.error("❌ API Error:", response.status, responseText)
+      console.error("❌ API Error:", {
+        status: response.status,
+        statusText: response.statusText,
+        url: loginUrl,
+        responseText: responseText.substring(0, 200)
+      })
+      
+      // Handle 404 specifically
+      if (response.status === 404) {
+        return NextResponse.json(
+          {
+            error: "API endpoint not found",
+            details: `The login endpoint was not found at ${loginUrl}. Please check your API URL configuration.`,
+            status: response.status,
+            url: loginUrl,
+            backendUrl: API_BASE_URL,
+          },
+          { status: 404 },
+        )
+      }
+      
       return NextResponse.json(
         {
-          error: "Invalid API key or authentication failed",
+          error: response.status === 401 ? "Invalid API key" : "Authentication failed",
           details: responseText,
           status: response.status,
+          url: loginUrl,
         },
-        { status: 401 },
+        { status: response.status },
       )
     }
   } catch (error) {
@@ -84,6 +115,7 @@ export async function POST(request: NextRequest) {
         details: error instanceof Error ? error.message : "Unknown error",
         connectionError: isConnectionError,
         backendUrl: API_BASE_URL,
+        attemptedUrl: loginUrl || `${API_BASE_URL}/auth/login`,
       },
       { status: isConnectionError ? 503 : 500 },
     )
