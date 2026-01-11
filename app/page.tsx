@@ -33,7 +33,8 @@ import {
   MessageSquare,
   Package,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Copy
 } from "lucide-react";
 import { MessagesView } from "../components/messages-view";
 import { OrderStatusDialog } from "../components/order-status-dialog";
@@ -376,6 +377,44 @@ export default function KitchenDashboard() {
       }
     } catch (err) {
       setError("Network error - check your connection");
+      setTimeout(() => setError(null), 5000);
+    }
+  };
+
+  const copyDeliveryInfo = async (order: Order) => {
+    try {
+      // Get current date in DD/MM/YYYY format
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+
+      // Format customer phone number
+      const customerPhone = order.wa_id.startsWith('+') 
+        ? order.wa_id 
+        : `+${order.wa_id}`;
+
+      // Format delivery info text
+      const deliveryText = `Date: ${dateStr}
+KBL Coffee 
+
+First pick up
+Sender: KBL Coffee
+Phone : 0787255672/+250 795 019 523
+Location: 2 KG 182 ST
+
+Receiver: ${order.profile_name || order.wa_id}
+Phone: ${customerPhone}
+Location: ${order.delivery_info || 'To be arranged'}`;
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(deliveryText);
+      
+      setSuccessMessage(`✅ Delivery info copied to clipboard for Order #${order.id}`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError("Failed to copy delivery info");
       setTimeout(() => setError(null), 5000);
     }
   };
@@ -1437,15 +1476,24 @@ export default function KitchenDashboard() {
                                     <div className="text-sm text-blue-700 mt-2 bg-blue-50 p-2 rounded-lg border border-blue-200">
                                       {deliveryInfo}
                                     </div>
-                                    <a
-                                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                                    >
-                                      <span>📍</span>
-                                      Open in Google Maps
-                                    </a>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      <a
+                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                      >
+                                        <span>📍</span>
+                                        Open in Google Maps
+                                      </a>
+                                      <Button
+                                        onClick={() => copyDeliveryInfo(order)}
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                                      >
+                                        <Copy size={16} />
+                                        Copy Delivery Info
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                               </div>

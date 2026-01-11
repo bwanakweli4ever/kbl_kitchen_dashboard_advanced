@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { User, Phone, CheckCircle, RefreshCw, Utensils, Clock, Search, Package } from "lucide-react"
+import { User, Phone, CheckCircle, RefreshCw, Utensils, Clock, Search, Package, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Order {
@@ -34,6 +34,45 @@ export function DeliveredOrdersView({ token }: DeliveredOrdersViewProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  const copyDeliveryInfo = async (order: Order) => {
+    try {
+      // Get current date in DD/MM/YYYY format
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+
+      // Format customer phone number
+      const customerPhone = order.wa_id.startsWith('+') 
+        ? order.wa_id 
+        : `+${order.wa_id}`;
+
+      // Format delivery info text
+      const deliveryText = `Date: ${dateStr}
+KBL Coffee 
+
+First pick up
+Sender: KBL Coffee
+Phone : 0787255672/+250 795 019 523
+Location: 2 KG 182 ST
+
+Receiver: ${order.profile_name || order.wa_id}
+Phone: ${customerPhone}
+Location: ${order.delivery_info || 'To be arranged'}`;
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(deliveryText);
+      
+      setSuccessMessage(`✅ Delivery info copied to clipboard for Order #${order.id}`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError("Failed to copy delivery info");
+      setTimeout(() => setError(null), 5000);
+    }
+  };
 
   const fetchDeliveredOrders = async () => {
     try {
@@ -156,6 +195,16 @@ export function DeliveredOrdersView({ token }: DeliveredOrdersViewProps) {
 
   return (
     <div className="space-y-6">
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+          {successMessage}
+        </div>
+      )}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -333,15 +382,24 @@ export function DeliveredOrdersView({ token }: DeliveredOrdersViewProps) {
                     <div className="bg-blue-50 p-2 rounded text-xs border border-blue-200 text-blue-800 mb-2">
                       {order.delivery_info}
                     </div>
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_info)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors font-medium"
-                    >
-                      <span>📍</span>
-                      Open in Maps
-                    </a>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_info)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors font-medium"
+                      >
+                        <span>📍</span>
+                        Open in Maps
+                      </a>
+                      <Button
+                        onClick={() => copyDeliveryInfo(order)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors font-medium"
+                      >
+                        <Copy size={14} />
+                        Copy Delivery Info
+                      </Button>
+                    </div>
                   </div>
                 )}
 
