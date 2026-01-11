@@ -28,6 +28,7 @@ import {
   Droplets,
   X,
   BarChart3,
+  ShoppingBag,
   Users,
   MessageSquare,
   Package,
@@ -39,6 +40,7 @@ import { OrderStatusDialog } from "../components/order-status-dialog";
 import { CustomersTableView } from "../components/customers-table-view";
 import { DeliveredOrdersCalendarView as CompletedOrdersCalendarView } from "../components/delivered-orders-calendar-view";
 import { OrdersChart } from "../components/orders-chart";
+import { ProductsManagement } from "../components/products-management";
 import { useNotifications } from "../hooks/use-notifications";
 import { useRealTimeOrders } from "../hooks/use-real-time-orders";
 import { NotificationCenter } from "../components/notification-center";
@@ -874,6 +876,10 @@ export default function KitchenDashboard() {
               <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Analytics</span>
           </TabsTrigger>
+            <TabsTrigger value="products" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
+              <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Products</span>
+          </TabsTrigger>
             <TabsTrigger value="completed" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Completed</span>
@@ -1575,6 +1581,11 @@ export default function KitchenDashboard() {
         {/* Analytics Tab */}
         <TabsContent value="analytics">
           <OrdersChart token={token} />
+        </TabsContent>
+
+        {/* Products Management Tab */}
+        <TabsContent value="products">
+          <ProductsManagement token={token} />
         </TabsContent>
 
         {/* Completed Orders Tab */}

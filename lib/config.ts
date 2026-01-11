@@ -2,8 +2,9 @@
 export const config = {
   // API Configuration
   api: {
-    //baseUrl: process.env.WHATSAPP_API_URL || "http://localhost:8000",
-    baseUrl: "https://backend.kblbites.com",
+    // Use localhost:8000 for development
+    baseUrl: "http://localhost:8000",
+    // For production, use: baseUrl: process.env.WHATSAPP_API_URL || "https://backend.kblbites.com",
     timeout: 15000, // 15 seconds
     retryAttempts: 3,
   },
