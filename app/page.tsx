@@ -67,6 +67,9 @@ interface Order {
   drinks?: string;
   order_source?: string;
   preset_name?: string;
+  payment_method?: string;
+  payment_status?: string;
+  payment_received_at?: string;
 }
 
 export default function KitchenDashboard() {
@@ -285,6 +288,49 @@ export default function KitchenDashboard() {
       setError("Network error - check your connection and API URL");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const markPaymentReceived = async (orderId: number) => {
+    if (!token) return;
+    
+    const confirmPayment = window.confirm(
+      `Are you sure you want to mark payment as received for Order #${orderId}?`
+    );
+    
+    if (!confirmPayment) return;
+    
+    try {
+      setUpdatingOrders(prev => new Set(prev).add(orderId));
+      setError(null);
+      setSuccessMessage(null);
+      
+      const response = await fetch(`https://backend.kblbites.com/api/mobile/orders/${orderId}/payment-received`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setSuccessMessage(`✅ Payment marked as received for Order #${orderId}`);
+        setTimeout(() => setSuccessMessage(null), 5000);
+        // Refresh orders
+        await handleOrderStatusUpdated();
+      } else {
+        setError(data.detail || data.error || "Failed to mark payment as received");
+      }
+    } catch (err) {
+      setError("Network error - check your connection");
+    } finally {
+      setUpdatingOrders(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(orderId);
+        return newSet;
+      });
     }
   };
 
@@ -1033,6 +1079,39 @@ Location: ${order.delivery_info || 'To be arranged'}`;
                               {formatCurrency(calculateOrderTotal(order))}
                             </div>
                               <div className="text-xs sm:text-sm text-gray-500">Total</div>
+                              {/* Payment Status Badge - Always Show */}
+                              <div className="mt-2 flex items-center justify-end gap-2">
+                                {(() => {
+                                  const paymentStatus = order.payment_status?.toLowerCase() || 'pending';
+                                  const isPaid = paymentStatus === 'paid';
+                                  
+                                  return isPaid ? (
+                                    <Badge className="bg-gradient-to-r from-green-500 to-green-600 text-white px-2 py-1 text-xs font-semibold">
+                                      <span className="mr-1">✅</span>
+                                      Paid
+                                    </Badge>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-2 py-1 text-xs font-semibold">
+                                        <span className="mr-1">⏳</span>
+                                        Pending
+                                      </Badge>
+                                      <button
+                                        onClick={() => markPaymentReceived(order.id)}
+                                        disabled={updatingOrders.has(order.id)}
+                                        className="px-2 py-1 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[24px]"
+                                        title="Mark as Paid"
+                                      >
+                                        {updatingOrders.has(order.id) ? (
+                                          <span className="animate-spin">⏳</span>
+                                        ) : (
+                                          <span>✓</span>
+                                        )}
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </div>
                           </div>
                           

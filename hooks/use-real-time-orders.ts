@@ -21,6 +21,9 @@ interface Order {
   customer_total_orders: number
   created_at: string
   updated_at: string
+  payment_method?: string
+  payment_status?: string
+  payment_received_at?: string
 }
 
 interface UseRealTimeOrdersProps {
@@ -74,7 +77,9 @@ export function useRealTimeOrders({
           prevOrder.ingredients.length !== newOrder.ingredients.length ||
           prevOrder.items !== newOrder.items ||
           prevOrder.drinks !== newOrder.drinks ||
-          prevOrder.order_source !== newOrder.order_source
+          prevOrder.order_source !== newOrder.order_source ||
+          prevOrder.payment_status !== newOrder.payment_status ||
+          prevOrder.payment_method !== newOrder.payment_method
         )
       })
       
