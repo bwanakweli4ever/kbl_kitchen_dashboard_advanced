@@ -294,18 +294,16 @@ export default function KitchenDashboard() {
   const markPaymentReceived = async (orderId: number) => {
     if (!token) return;
     
-    const confirmPayment = window.confirm(
-      `Are you sure you want to mark payment as received for Order #${orderId}?`
-    );
-    
-    if (!confirmPayment) return;
+    // Prevent multiple clicks
+    if (updatingOrders.has(orderId)) return;
     
     try {
       setUpdatingOrders(prev => new Set(prev).add(orderId));
       setError(null);
       setSuccessMessage(null);
       
-      const response = await fetch(`https://backend.kblbites.com/api/mobile/orders/${orderId}/payment-received`, {
+      console.log(`Marking payment as received for order ${orderId}`);
+      const response = await fetch(`/api/orders/${orderId}/payment-received`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -313,18 +311,30 @@ export default function KitchenDashboard() {
         },
       });
       
+      console.log(`Payment API response status: ${response.status}`);
       const data = await response.json();
+      console.log(`Payment API response data:`, data);
       
       if (response.ok) {
         setSuccessMessage(`✅ Payment marked as received for Order #${orderId}`);
-        setTimeout(() => setSuccessMessage(null), 5000);
-        // Refresh orders
-        await handleOrderStatusUpdated();
+        setTimeout(() => setSuccessMessage(null), 3000);
+        
+        // Wait a moment for DB transaction to complete, then force refresh
+        setTimeout(async () => {
+          // Force refresh bypassing debounce to get immediate update
+          console.log(`Forcing refresh after payment update`);
+          await refreshOrders(true);
+        }, 800);
       } else {
-        setError(data.detail || data.error || "Failed to mark payment as received");
+        const errorMsg = data.detail || data.error || data.details || "Failed to mark payment as received";
+        console.error(`Payment update failed:`, errorMsg, data);
+        setError(errorMsg);
+        setTimeout(() => setError(null), 5000);
       }
     } catch (err) {
+      console.error("Error marking payment:", err);
       setError("Network error - check your connection");
+      setTimeout(() => setError(null), 5000);
     } finally {
       setUpdatingOrders(prev => {
         const newSet = new Set(prev);
@@ -1080,35 +1090,46 @@ Location: ${order.delivery_info || 'To be arranged'}`;
                             </div>
                               <div className="text-xs sm:text-sm text-gray-500">Total</div>
                               {/* Payment Status Badge - Always Show */}
-                              <div className="mt-2 flex items-center justify-end gap-2">
+                              <div className="mt-3 flex flex-col items-end gap-2">
                                 {(() => {
                                   const paymentStatus = order.payment_status?.toLowerCase() || 'pending';
-                                  const isPaid = paymentStatus === 'paid';
+                                  const hasPaymentReceived = order.payment_received_at !== null && order.payment_received_at !== undefined;
+                                  const isPaid = paymentStatus === 'paid' || paymentStatus === 'received' || hasPaymentReceived;
                                   
                                   return isPaid ? (
-                                    <Badge className="bg-gradient-to-r from-green-500 to-green-600 text-white px-2 py-1 text-xs font-semibold">
-                                      <span className="mr-1">✅</span>
+                                    <Badge className="bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2.5 text-sm font-semibold shadow-lg">
+                                      <CheckCircle className="h-4 w-4 mr-1.5" />
                                       Paid
                                     </Badge>
                                   ) : (
-                                    <div className="flex items-center gap-2">
-                                      <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-2 py-1 text-xs font-semibold">
+                                    <>
+                                      <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-3 py-1.5 text-xs font-semibold">
                                         <span className="mr-1">⏳</span>
-                                        Pending
+                                        Payment Pending
                                       </Badge>
                                       <button
-                                        onClick={() => markPaymentReceived(order.id)}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          markPaymentReceived(order.id);
+                                        }}
                                         disabled={updatingOrders.has(order.id)}
-                                        className="px-2 py-1 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[24px]"
-                                        title="Mark as Paid"
+                                        className="inline-flex items-center justify-center gap-2 px-5 py-3 text-base font-semibold text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg active:scale-95 touch-manipulation min-h-[48px] min-w-[140px]"
+                                        title="Mark Payment as Received"
                                       >
                                         {updatingOrders.has(order.id) ? (
-                                          <span className="animate-spin">⏳</span>
+                                          <>
+                                            <RefreshCw className="h-5 w-5 animate-spin" />
+                                            <span>Marking...</span>
+                                          </>
                                         ) : (
-                                          <span>✓</span>
+                                          <>
+                                            <CheckCircle className="h-5 w-5" />
+                                            <span>Mark as Paid</span>
+                                          </>
                                         )}
                                       </button>
-                                    </div>
+                                    </>
                                   );
                                 })()}
                               </div>

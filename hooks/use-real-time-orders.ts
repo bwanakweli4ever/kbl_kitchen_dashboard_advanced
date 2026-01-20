@@ -251,11 +251,11 @@ export function useRealTimeOrders({
   }, [isActive, token, pollOrders])
 
   // Manual refresh with debouncing
-  const refreshOrders = useCallback(async () => {
+  const refreshOrders = useCallback(async (force: boolean = false) => {
     if (!token || pollingActiveRef.current) return
     
     const now = Date.now()
-    if (now - lastPollTimeRef.current < 3000) { // Minimum 3 seconds between manual refreshes
+    if (!force && now - lastPollTimeRef.current < 3000) { // Minimum 3 seconds between manual refreshes (unless forced)
       console.log("Manual refresh skipped - too soon since last fetch")
       return
     }
