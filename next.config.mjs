@@ -21,6 +21,12 @@ const nextConfig = {
         level: 'error',
       };
     }
+    
+    // Fix for Leaflet in Next.js
+    config.resolve.alias = {
+      ...config.resolve.alias,
+    };
+    
     return config;
   },
   // Disable error overlay

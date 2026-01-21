@@ -34,7 +34,8 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
-  Copy
+  Copy,
+  ZoomIn
 } from "lucide-react";
 import { MessagesView } from "../components/messages-view";
 import { OrderStatusDialog } from "../components/order-status-dialog";
@@ -47,6 +48,8 @@ import { useRealTimeOrders } from "../hooks/use-real-time-orders";
 import { NotificationCenter } from "../components/notification-center";
 import { NotificationBadge } from "../components/notification-badge";
 import { RealTimeIndicator } from "../components/real-time-indicator";
+import { DeliveryMap, parseCoordinates } from "../components/delivery-map";
+import { OrderDetailModal } from "../components/order-detail-modal";
 
 interface Order {
   id: number;
@@ -59,6 +62,9 @@ interface Order {
   sauce: string;
   food_total: number | null;
   delivery_info: string;
+  delivery_latitude?: number | null;
+  delivery_longitude?: number | null;
+  delivery_address?: string | null;
   status: string;
   customer_total_orders: number;
   created_at: string;
@@ -85,6 +91,8 @@ export default function KitchenDashboard() {
   const [showMultipleItems, setShowMultipleItems] = useState<Set<number>>(new Set());
   const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -783,6 +791,11 @@ Location: ${order.delivery_info || 'To be arranged'}`;
     });
   };
 
+  const openOrderModal = (order: Order) => {
+    setSelectedOrderForModal(order);
+    setIsOrderModalOpen(true);
+  };
+
 
   if (!isAuthenticated) {
     return (
@@ -1053,26 +1066,40 @@ Location: ${order.delivery_info || 'To be arranged'}`;
                   return (
                     <Card
                       key={order.id}
-                      className="w-full max-w-lg sm:max-w-xl md:max-w-2xl lg:max-w-none shadow-xl hover:shadow-2xl transition-all duration-300 border-2 border-gray-200 hover:border-green-400 bg-gradient-to-br from-white to-gray-50 relative rounded-xl overflow-hidden transform hover:scale-105 active:scale-95 touch-manipulation"
-                      style={{
-                        animationDelay: `${animationDelay}s`,
-                        animationFillMode: 'both'
-                      }}
+                      className="w-full max-w-lg sm:max-w-xl md:max-w-2xl lg:max-w-none shadow-xl border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50 relative rounded-xl overflow-hidden touch-manipulation"
                     >
-                      {/* Close Button */}
+                      {/* Zoom Button - Top Left */}
                       <button
-                        onClick={() => closeOrder(order.id)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openOrderModal(order);
+                        }}
+                        className="absolute top-2 left-2 sm:top-3 sm:left-3 h-8 w-8 sm:h-9 sm:w-9 p-0 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white flex items-center justify-center transition-all duration-200 touch-manipulation shadow-lg hover:shadow-xl active:scale-95 z-10 cursor-pointer"
+                        title="View full order details (Click to zoom)"
+                      >
+                        <ZoomIn className="h-4 w-4 sm:h-4 sm:w-4" />
+                      </button>
+                      
+                      {/* Close Button - Top Right */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          closeOrder(order.id);
+                        }}
                         disabled={updatingOrders.has(order.id)}
-                        className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-md hover:bg-red-100 hover:text-red-600 flex items-center justify-center z-10 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 touch-manipulation"
+                        className="absolute top-2 right-2 sm:top-3 sm:right-3 h-8 w-8 sm:h-9 sm:w-9 p-0 rounded-md hover:bg-red-100 hover:text-red-600 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 touch-manipulation bg-white shadow-md border-2 border-red-200 z-10"
+                        title="Close order"
                       >
                         {updatingOrders.has(order.id) ? (
-                          <span className="animate-spin text-red-600 text-xs sm:text-sm">⏳</span>
+                          <span className="animate-spin text-red-600 text-sm">⏳</span>
                         ) : (
-                          <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <X className="h-4 w-4 sm:h-5 sm:w-5" />
                         )}
                       </button>
 
-                      <CardHeader className="pb-6 sm:pb-7 md:pb-8 pr-12 sm:pr-14 md:pr-16 bg-gradient-to-r from-gray-50 to-white border-b-2 border-gray-200 p-6 sm:p-7 md:p-8">
+                      <CardHeader className="pb-6 sm:pb-7 md:pb-8 pl-20 sm:pl-24 md:pl-28 pr-20 sm:pr-24 md:pr-28 bg-gradient-to-r from-gray-50 to-white border-b-2 border-gray-200 p-6 sm:p-7 md:p-8">
                         <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-5">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 sm:gap-4">
@@ -1534,7 +1561,7 @@ Location: ${order.delivery_info || 'To be arranged'}`;
                                         }
                                       })()}
 
-                        {/* Delivery Info */}
+                        {/* Delivery Info with OpenStreetMap */}
                         {(() => {
                           // Check if location is valid - accept coordinates, addresses, or any non-default value
                           const deliveryInfo = order.delivery_info || '';
@@ -1546,55 +1573,81 @@ Location: ${order.delivery_info || 'To be arranged'}`;
                             deliveryInfoLower === 'location shared' ||
                             deliveryInfoLower === 'none';
                           
-                          // Check if it looks like coordinates (e.g., "-1.9441,30.0619" or contains "lat" and "lng")
-                          const looksLikeCoordinates = /^-?\d+\.?\d*[,,\s]+-?\d+\.?\d*$/.test(deliveryInfo.replace(/\s/g, '')) ||
-                            /lat.*lng/i.test(deliveryInfo) ||
-                            /^-?\d+\.?\d*,\s*-?\d+\.?\d*$/.test(deliveryInfo);
+                          // Prefer backend-parsed coordinates, fallback to frontend parsing
+                          let latitude: number | null = null;
+                          let longitude: number | null = null;
+                          let address: string = deliveryInfo;
                           
-                          if (!isInvalidLocation || looksLikeCoordinates) {
-                            // Format coordinates for Google Maps
+                          if (order.delivery_latitude !== null && order.delivery_latitude !== undefined &&
+                              order.delivery_longitude !== null && order.delivery_longitude !== undefined) {
+                            // Use backend-parsed coordinates
+                            latitude = order.delivery_latitude;
+                            longitude = order.delivery_longitude;
+                            address = order.delivery_address || deliveryInfo;
+                          } else {
+                            // Fallback to frontend parsing
+                            const parsed = parseCoordinates(deliveryInfo);
+                            latitude = parsed.latitude;
+                            longitude = parsed.longitude;
+                            address = parsed.address;
+                          }
+                          
+                          // Check if we have valid coordinates
+                          const hasValidCoordinates = latitude !== null && longitude !== null && 
+                            !isNaN(latitude) && !isNaN(longitude) &&
+                            latitude >= -90 && latitude <= 90 &&
+                            longitude >= -180 && longitude <= 180;
+                          
+                          if (!isInvalidLocation || hasValidCoordinates) {
+                            // Format coordinates for external maps
                             let mapsQuery = deliveryInfo;
-                            if (looksLikeCoordinates) {
-                              // Extract coordinates from "Lat: X, Lng: Y" format
-                              const coordMatch = deliveryInfo.match(/(?:lat|latitude)[:\s]+(-?\d+\.?\d*)[,\s]+(?:lng|longitude)[:\s]+(-?\d+\.?\d*)/i);
-                              if (coordMatch) {
-                                mapsQuery = `${coordMatch[1]},${coordMatch[2]}`;
-                              } else {
-                                // Already in "X,Y" format - clean it up
-                                mapsQuery = deliveryInfo.replace(/\s/g, '').replace(/lat:?\s*/gi, '').replace(/lng:?\s*/gi, '');
-                              }
+                            if (hasValidCoordinates) {
+                              mapsQuery = `${latitude},${longitude}`;
                             }
                             
                             return (
-                              <div className="bg-white border-2 border-blue-200 rounded-lg p-3 shadow-sm">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <span className="text-lg">🚚</span>
+                              <div className="bg-white border-2 border-blue-200 rounded-lg p-4 sm:p-5 shadow-lg">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span className="text-xl">🚚</span>
                                   </div>
                                   <div className="flex-1">
-                                    <h3 className="text-lg font-bold text-blue-900">Delivery Information</h3>
-                                    <div className="text-sm text-blue-700 mt-2 bg-blue-50 p-2 rounded-lg border border-blue-200">
-                                      {deliveryInfo}
-                                    </div>
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      <a
-                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                                      >
-                                        <span>📍</span>
-                                        Open in Google Maps
-                                      </a>
-                                      <Button
-                                        onClick={() => copyDeliveryInfo(order)}
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                                      >
-                                        <Copy size={16} />
-                                        Copy Delivery Info
-                                      </Button>
-                                    </div>
+                                    <h3 className="text-lg sm:text-xl font-bold text-blue-900">Delivery Location</h3>
+                                    {address && !hasValidCoordinates && (
+                                      <div className="text-sm text-blue-700 mt-1 bg-blue-50 p-2 rounded-lg border border-blue-200">
+                                        {address}
+                                      </div>
+                                    )}
                                   </div>
+                                </div>
+                                
+                                {/* Delivery Address Information */}
+                                {hasValidCoordinates ? (
+                                  <div className="mb-4">
+                                    <DeliveryMap
+                                      id={order.id}
+                                      latitude={latitude!}
+                                      longitude={longitude!}
+                                      address={address}
+                                      height="300px"
+                                      zoom={15}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="text-sm text-blue-700 mb-4 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                    {deliveryInfo}
+                                  </div>
+                                )}
+                                
+                                {/* Action Buttons */}
+                                <div className="flex flex-wrap gap-2">
+                                  <Button
+                                    onClick={() => copyDeliveryInfo(order)}
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                                  >
+                                    <Copy size={16} />
+                                    Copy Address
+                                  </Button>
                                 </div>
                               </div>
                             );
@@ -1740,7 +1793,19 @@ Location: ${order.delivery_info || 'To be arranged'}`;
         <TabsContent value="completed">
           <CompletedOrdersCalendarView token={token} />
         </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
+        </Tabs>
+
+        {/* Order Detail Modal */}
+        <OrderDetailModal
+          order={selectedOrderForModal}
+          open={isOrderModalOpen}
+          onOpenChange={setIsOrderModalOpen}
+          formatCurrency={formatCurrency}
+          calculateOrderTotal={calculateOrderTotal}
+          getBreadChoice={getBreadChoice}
+          getSizeDisplayName={getSizeDisplayName}
+          getSpiceLevel={getSpiceLevel}
+        />
+      </div>
+    );
+  }
