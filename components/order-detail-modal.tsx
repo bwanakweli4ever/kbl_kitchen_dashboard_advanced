@@ -20,6 +20,13 @@ import {
   Droplets,
   Flame
 } from "lucide-react"
+import { config } from "@/lib/config"
+
+// Helper function to get stored token
+function getStoredToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem("kitchen_token")
+}
 
 // Helper function to get solid color and styling for ingredients
 function getIngredientStyle(ingredientName: string): { bgColor: string; textColor: string; shadow: string } {
@@ -437,7 +444,7 @@ export function OrderDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[95vh] overflow-y-auto p-3 sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-3xl font-bold text-center mb-4">
             Order #{order.id} - Kitchen View
@@ -521,7 +528,7 @@ export function OrderDetailModal({
                     </div>
                     
                     {itemIngredients.length > 0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
                         {itemIngredients.map((ing: string, ingIdx: number) => {
                           const ingredientName = ing.replace(/-/g, ' ').trim()
                           const style = getIngredientStyle(ingredientName)
@@ -529,14 +536,16 @@ export function OrderDetailModal({
                           return (
                             <div
                               key={ingIdx}
-                              className={`${style.bgColor} ${style.textColor} rounded-2xl shadow-2xl ${style.shadow} hover:shadow-3xl hover:scale-105 transition-all duration-300 flex items-center justify-center min-h-[140px] p-6 border-2 border-black/10`}
+                              className={`${style.bgColor} ${style.textColor} rounded-xl sm:rounded-2xl shadow-lg sm:shadow-2xl ${style.shadow} hover:shadow-3xl hover:scale-105 transition-all duration-300 flex items-center justify-center min-h-[100px] sm:min-h-[120px] md:min-h-[140px] p-3 sm:p-4 md:p-6 border-2 border-black/10 overflow-hidden`}
                             >
-                              <div className="text-center">
-                                <div className={`text-3xl md:text-4xl font-extrabold capitalize break-words`}
+                              <div className="text-center w-full px-2">
+                                <div className={`text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-extrabold capitalize break-words hyphens-auto overflow-wrap-anywhere`}
                                   style={{
                                     textShadow: style.textColor === 'text-white' 
                                       ? '2px 2px 4px rgba(0,0,0,0.5), 0 0 8px rgba(0,0,0,0.3)' 
-                                      : '1px 1px 2px rgba(0,0,0,0.2)'
+                                      : '1px 1px 2px rgba(0,0,0,0.2)',
+                                    wordBreak: 'break-word',
+                                    overflowWrap: 'break-word'
                                   }}
                                 >
                                   {ingredientName}

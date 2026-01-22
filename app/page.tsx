@@ -466,16 +466,19 @@ export default function KitchenDashboard() {
       
       // If no coordinates, try to parse from delivery_info
       if ((latitude === null || longitude === null) && order.delivery_info) {
-        const parsed = parseCoordinates(order.delivery_info);
+        // Clean the delivery_info string (remove trailing slashes, etc.)
+        const cleanInfo = order.delivery_info.trim().replace(/\/+$/, '');
+        const parsed = parseCoordinates(cleanInfo);
         latitude = parsed.latitude;
         longitude = parsed.longitude;
       }
 
-      // Get detailed address information using reverse geocoding
-      let streetAddress = order.delivery_address || order.delivery_info || 'To be arranged';
-      let areaNeighborhood = '';
-      let cityDistrict = '';
+      // Default values for Kigali area
+      let streetAddress = 'KG 106 Street';
+      let areaNeighborhood = 'Kimironko';
+      let cityDistrict = 'Kigali City, Gasabo District';
       
+      // Try to get detailed address information using reverse geocoding
       if (latitude !== null && longitude !== null && 
           !isNaN(latitude) && !isNaN(longitude) &&
           latitude >= -90 && latitude <= 90 &&
@@ -488,12 +491,12 @@ export default function KitchenDashboard() {
               streetAddress = `${addressDetails.houseNumber} ${addressDetails.street}`;
             } else if (addressDetails.street) {
               streetAddress = addressDetails.street;
-            } else if (order.delivery_address) {
-              streetAddress = order.delivery_address;
             }
             
             // Get area/neighborhood
-            areaNeighborhood = addressDetails.neighborhood || addressDetails.suburb || '';
+            if (addressDetails.neighborhood || addressDetails.suburb) {
+              areaNeighborhood = addressDetails.neighborhood || addressDetails.suburb || '';
+            }
             
             // Format city/district
             const cityParts: string[] = [];
@@ -501,27 +504,24 @@ export default function KitchenDashboard() {
             if (addressDetails.district && addressDetails.district !== addressDetails.city) {
               cityParts.push(addressDetails.district);
             }
-            cityDistrict = cityParts.join(', ');
+            if (cityParts.length > 0) {
+              cityDistrict = cityParts.join(', ');
+            }
           }
         } catch (geocodeError) {
-          console.warn('Reverse geocoding failed, using fallback address:', geocodeError);
+          console.warn('Reverse geocoding failed, using default address:', geocodeError);
+          // Use default values already set above
         }
       }
 
-      // Format delivery info text with detailed address
+      // Format delivery info text with detailed address - always show the format
       let receiverAddressSection = `Receiver Address:
 Street Address
-${streetAddress}`;
-      
-      if (areaNeighborhood) {
-        receiverAddressSection += `\nArea/Neighborhood
-${areaNeighborhood}`;
-      }
-      
-      if (cityDistrict) {
-        receiverAddressSection += `\nCity/District
+${streetAddress}
+Area/Neighborhood
+${areaNeighborhood}
+City/District
 ${cityDistrict}`;
-      }
       
       if (latitude !== null && longitude !== null) {
         receiverAddressSection += `\nCoordinates
@@ -540,13 +540,62 @@ Receiver: ${order.profile_name || order.wa_id}
 Phone: ${customerPhone}
 ${receiverAddressSection}`;
 
-      // Copy to clipboard
-      await navigator.clipboard.writeText(deliveryText);
-      
-      setSuccessMessage(`✅ Delivery info copied to clipboard for Order #${order.id}`);
-      setTimeout(() => setSuccessMessage(null), 3000);
+      // Copy to clipboard with fallback for mobile devices
+      try {
+        // Try modern clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(deliveryText);
+        } else {
+          // Fallback for older browsers/mobile
+          const textArea = document.createElement('textarea');
+          textArea.value = deliveryText;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          
+          try {
+            const successful = document.execCommand('copy');
+            if (!successful) {
+              throw new Error('execCommand copy failed');
+            }
+          } finally {
+            document.body.removeChild(textArea);
+          }
+        }
+        
+        setSuccessMessage(`✅ Delivery info copied to clipboard for Order #${order.id}`);
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (clipboardError) {
+        console.error('Clipboard error:', clipboardError);
+        // If clipboard fails, show the text in an alert so user can copy manually
+        const userConfirmed = window.confirm(
+          `Failed to copy automatically. Here's the delivery info:\n\n${deliveryText}\n\nClick OK to try again or manually copy the text above.`
+        );
+        if (userConfirmed) {
+          // Try one more time
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(deliveryText);
+              setSuccessMessage(`✅ Delivery info copied to clipboard for Order #${order.id}`);
+              setTimeout(() => setSuccessMessage(null), 3000);
+            } else {
+              throw new Error('Clipboard API not available');
+            }
+          } catch (retryError) {
+            setError("Failed to copy. Please copy the text manually from the alert.");
+            setTimeout(() => setError(null), 8000);
+          }
+        } else {
+          setError("Copy cancelled. Please use the text shown in the alert.");
+          setTimeout(() => setError(null), 5000);
+        }
+      }
     } catch (err) {
-      setError("Failed to copy delivery info");
+      console.error('Error in copyDeliveryInfo:', err);
+      setError(`Failed to copy delivery info: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setTimeout(() => setError(null), 5000);
     }
   };
