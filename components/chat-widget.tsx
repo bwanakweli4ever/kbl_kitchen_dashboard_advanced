@@ -4,8 +4,8 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { MessageSquare, Send, Loader2, User, Phone } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { MessageSquare, Send, Loader2, User, Phone, X, ChevronDown, ChevronUp, Bell, Minimize, Maximize } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Message {
@@ -24,10 +24,29 @@ interface ChatWidgetProps {
   phoneNumber: string
   token: string | null
   trigger?: React.ReactNode
+  orderId?: number
+  onNewMessage?: (message: Message) => void
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWidgetProps) {
-  const [open, setOpen] = useState(false)
+export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId, onNewMessage, defaultOpen = false, open: controlledOpen, onOpenChange }: ChatWidgetProps) {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen)
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen
+  const setOpen = (newOpen: boolean) => {
+    if (controlledOpen === undefined) {
+      setInternalOpen(newOpen)
+    }
+    if (onOpenChange) {
+      onOpenChange(newOpen)
+    }
+  }
+  const [isMinimized, setIsMinimized] = useState(false)
+  const [hasNewMessages, setHasNewMessages] = useState(false)
+  const [lastMessageId, setLastMessageId] = useState<number | null>(null)
+  const [showNotification, setShowNotification] = useState(false)
+  const [notificationMessage, setNotificationMessage] = useState<Message | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [loading, setLoading] = useState(false)
@@ -65,7 +84,8 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWi
           wa_id: message.wa_id || phoneNumber,
           profile_name: message.profile_name || customerName,
           message_type: message.message_type || "text",
-          body: message.body || "",
+          // Use raw_message for order messages if available, otherwise use body
+          body: (message.is_order && message.raw_message) ? message.raw_message : (message.body || ""),
           is_order: message.is_order || false,
           created_at: message.created_at || new Date().toISOString(),
           direction: message.direction || "inbound",
@@ -75,6 +95,27 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWi
         processedMessages.sort(
           (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         )
+
+        // Check for new messages
+        if (lastMessageId !== null && processedMessages.length > 0) {
+          const latestMessage = processedMessages[processedMessages.length - 1]
+          if (latestMessage.id > lastMessageId && latestMessage.direction === "inbound") {
+            setHasNewMessages(true)
+            setNotificationMessage(latestMessage)
+            setShowNotification(true)
+            if (onNewMessage) {
+              onNewMessage(latestMessage)
+            }
+            // Auto-hide notification after 5 seconds
+            setTimeout(() => {
+              setShowNotification(false)
+            }, 5000)
+          }
+        } else if (processedMessages.length > 0) {
+          // First load - set the last message ID
+          const latestMessage = processedMessages[processedMessages.length - 1]
+          setLastMessageId(latestMessage.id)
+        }
 
         setMessages(processedMessages)
       } else {
@@ -173,15 +214,31 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWi
   }, [open, token, phoneNumber])
 
   const handleOpenChange = (newOpen: boolean) => {
-    console.log("Chat dialog open change:", newOpen)
+    console.log("Chat widget open change:", newOpen)
     setOpen(newOpen)
     if (newOpen) {
+      setIsMinimized(false)
+      setHasNewMessages(false)
       fetchMessages()
     } else {
       setMessages([])
       setNewMessage("")
       setError(null)
+      setHasNewMessages(false)
     }
+  }
+
+  const handleMinimize = () => {
+    setIsMinimized(!isMinimized)
+    if (!isMinimized) {
+      setHasNewMessages(false)
+    }
+  }
+
+  const handleClose = () => {
+    setOpen(false)
+    setIsMinimized(false)
+    setHasNewMessages(false)
   }
 
   const formatTime = (dateStr: string) => {
@@ -211,220 +268,345 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger }: ChatWi
     }
   }
 
+  // If trigger is provided, use it as a button to open the floating widget
+  if (trigger && !open && !showNotification) {
+    return (
+      <div onClick={() => handleOpenChange(true)} className="cursor-pointer">
+        {trigger}
+      </div>
+    )
+  }
+
+  // Show floating widget container if open OR if there's a notification
+  // If open is controlled from outside, always show when open is true
+  if (!open && !showNotification) {
+    return null
+  }
+  
+  // Ensure we have required props
+  if (!phoneNumber || !token) {
+    return null
+  }
+
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <button
-            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
-            onClick={() => {
-              console.log("Chat trigger clicked!")
-              setOpen(true)
-            }}
-          >
-            <MessageSquare className="h-4 w-4" />
-            Chat
-          </button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md h-[600px] flex flex-col p-0">
-        <DialogHeader className="p-4 pb-2 border-b">
-          <DialogTitle className="flex items-center gap-3">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      {/* New Message Notification Popup */}
+      {showNotification && notificationMessage && !open && (
+        <div className="bg-white rounded-lg shadow-2xl border-2 border-green-400 p-4 w-80 animate-in slide-in-from-bottom-5">
+          <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <User className="h-4 w-4 text-green-600" />
-              </div>
-              <div>
-                <div className="font-semibold">{customerName}</div>
+              <Bell className="h-5 w-5 text-green-600 animate-pulse" />
+              <div className="font-semibold text-sm">New Message</div>
+            </div>
+            <button
+              onClick={() => setShowNotification(false)}
+              className="p-1 hover:bg-gray-200 rounded transition-colors"
+            >
+              <X className="h-4 w-4 text-gray-600" />
+            </button>
+          </div>
+          <div className="text-sm text-gray-700 mb-2">
+            <div className="font-medium">{customerName}</div>
+            <div className="text-xs text-gray-500 truncate">{notificationMessage.body.substring(0, 100)}...</div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => {
+                setShowNotification(false)
+                handleOpenChange(true)
+              }}
+              className="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs h-8"
+            >
+              Open Chat
+            </Button>
+            <Button
+              onClick={() => setShowNotification(false)}
+              variant="outline"
+              className="text-xs h-8"
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
+      
+      {/* Floating Chat Widget */}
+      {open && (
+        <div
+          className={cn(
+            "bg-white rounded-lg shadow-2xl border-2 border-gray-200 flex flex-col transition-all duration-300",
+            isMinimized ? "w-80 h-16" : "w-96 h-[600px]"
+          )}
+        >
+        {/* Header */}
+        <div className="p-4 pb-2 border-b bg-gradient-to-r from-green-50 to-blue-50 flex items-center justify-between rounded-t-lg">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <User className="h-5 w-5 text-green-600" />
+            </div>
+            {!isMinimized && (
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm truncate">{customerName}</div>
                 <div className="text-xs text-gray-500 flex items-center gap-1">
                   <Phone className="h-3 w-3" />
-                  {phoneNumber}
+                  <span className="truncate">{phoneNumber}</span>
+                </div>
+              </div>
+            )}
+            {isMinimized && (
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm truncate">{customerName}</div>
+                {hasNewMessages && (
+                  <div className="flex items-center gap-1 text-xs text-green-600">
+                    <Bell className="h-3 w-3 animate-pulse" />
+                    <span>New message</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {hasNewMessages && !isMinimized && (
+              <Badge variant="destructive" className="text-xs h-5 px-2 animate-pulse">
+                New
+              </Badge>
+            )}
+            <button
+              onClick={handleMinimize}
+              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              title={isMinimized ? "Expand" : "Minimize"}
+            >
+              {isMinimized ? (
+                <Maximize className="h-4 w-4 text-gray-600" />
+              ) : (
+                <Minimize className="h-4 w-4 text-gray-600" />
+              )}
+            </button>
+            <button
+              onClick={handleClose}
+              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              title="Close"
+            >
+              <X className="h-4 w-4 text-gray-600" />
+            </button>
+          </div>
+        </div>
+
+        {/* Messages Area - Only show when not minimized */}
+        {!isMinimized && (
+          <>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {loading && messages.length === 0 ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="text-center">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-green-500" />
+                    <p className="text-sm text-gray-600">Loading messages...</p>
+                  </div>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="text-center">
+                    <MessageSquare className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                    <p className="text-sm text-gray-600">No messages yet</p>
+                    <p className="text-xs text-gray-500">Start a conversation!</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {messages.map((message, index) => {
+                    const showDate =
+                      index === 0 || formatDate(message.created_at) !== formatDate(messages[index - 1].created_at)
+
+                    return (
+                      <div key={message.id}>
+                        {showDate && (
+                          <div className="flex justify-center my-4">
+                            <Badge variant="outline" className="text-xs">
+                              {formatDate(message.created_at)}
+                            </Badge>
+                          </div>
+                        )}
+
+                        <div className={cn("flex", message.direction === "outbound" ? "justify-end" : "justify-start")}>
+                          <div
+                            className={cn(
+                              "max-w-[80%] rounded-lg px-3 py-2 text-sm",
+                              message.direction === "outbound" ? "bg-green-500 text-white" : "bg-gray-100 text-gray-900",
+                            )}
+                          >
+                            {/* Display message - show raw message text AND location if present */}
+                            {(() => {
+                              let hasLocation = false;
+                              let locationData: any = null;
+                              
+                              // Check if message contains location data
+                              try {
+                                const parsed = JSON.parse(message.body);
+                                if (parsed && (parsed.latitude || parsed.longitude || parsed.address)) {
+                                  hasLocation = true;
+                                  locationData = parsed;
+                                }
+                              } catch (e) {
+                                // Not JSON, check if it's a location string pattern
+                                const locationPattern = /(?:location|address|coordinates?)[\s:]*([^\n]+)/i;
+                                const match = message.body.match(locationPattern);
+                                if (match) {
+                                  hasLocation = true;
+                                  locationData = { address: match[1] };
+                                }
+                              }
+                              
+                              return (
+                                <div className="space-y-2">
+                                  {/* Always show raw message text */}
+                                  <div className="whitespace-pre-wrap text-sm">
+                                    {message.body}
+                                  </div>
+                                  
+                                  {/* If location data exists, also show formatted location */}
+                                  {hasLocation && locationData && (
+                                    <div className="mt-2 pt-2 border-t border-white/20">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-lg">📍</span>
+                                        <span className="font-semibold text-xs">Location Details</span>
+                                      </div>
+                                      {locationData.address && (
+                                        <div className="bg-white/80 dark:bg-gray-800/80 p-2 rounded text-xs mb-1">
+                                          <div className="font-medium mb-1">Address:</div>
+                                          <div className="text-gray-700 dark:text-gray-300">{locationData.address}</div>
+                                        </div>
+                                      )}
+                                      {(locationData.latitude || locationData.longitude) && (
+                                        <div className="text-xs opacity-80 mb-1">
+                                          Coordinates: {locationData.latitude ? `${locationData.latitude}` : 'N/A'}, {locationData.longitude ? `${locationData.longitude}` : 'N/A'}
+                                        </div>
+                                      )}
+                                      {locationData.name && (
+                                        <div className="text-xs opacity-80 mb-1">
+                                          Location Name: {locationData.name}
+                                        </div>
+                                      )}
+                                      {locationData.latitude && locationData.longitude && (
+                                        <a
+                                          href={`https://www.google.com/maps?q=${locationData.latitude},${locationData.longitude}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-xs underline hover:opacity-80 inline-block"
+                                        >
+                                          View on Google Maps →
+                                        </a>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            <div className="flex items-center gap-2 mt-1">
+                              <div
+                                className={cn(
+                                  "text-xs",
+                                  message.direction === "outbound" ? "text-green-100" : "text-gray-500",
+                                )}
+                              >
+                                {formatTime(message.created_at)}
+                              </div>
+                              {message.is_order && (
+                                <Badge variant="secondary" className="text-xs h-4 px-1">
+                                  🍽️
+                                </Badge>
+                              )}
+                              {message.message_type === 'location' && (
+                                <Badge variant="secondary" className="text-xs h-4 px-1">
+                                  📍
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div ref={messagesEndRef} />
+                </>
+              )}
+            </div>
+
+            {/* Error Message */}
+            {error && <div className="mx-4 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">{error}</div>}
+
+            {/* Message Input */}
+            <div className="p-4 border-t bg-white">
+              <div className="flex gap-2 items-end">
+                {/* Text Input */}
+                <div className="flex-1">
+                  <textarea
+                    value={newMessage}
+                    onChange={(e) => {
+                      console.log("Input changed:", e.target.value)
+                      setNewMessage(e.target.value)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault()
+                        console.log("🎯 ENTER KEY PRESSED - CALLING SEND MESSAGE")
+                        sendMessage()
+                      }
+                    }}
+                    placeholder="Type a message..."
+                    className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    rows={2}
+                    maxLength={1000}
+                    disabled={sending}
+                  />
+                  <div className="text-xs text-gray-500 mt-1">{newMessage.length}/1000 characters</div>
+                </div>
+
+                {/* Send Button */}
+                <div className="flex flex-col items-center">
+                  <button
+                    onClick={() => {
+                      console.log("🎯 SEND BUTTON CLICKED!")
+                      sendMessage()
+                    }}
+                    disabled={!newMessage.trim() || sending}
+                    className="w-12 h-12 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                    style={{
+                      pointerEvents: sending || !newMessage.trim() ? "none" : "auto",
+                    }}
+                  >
+                    {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                  </button>
+                  <span className="text-xs text-gray-500 mt-1">{sending ? "Sending..." : "Send"}</span>
                 </div>
               </div>
             </div>
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {loading && messages.length === 0 ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="text-center">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-green-500" />
-                <p className="text-sm text-gray-600">Loading messages...</p>
+          </>
+        )}
+        
+        {/* Minimized view - click to expand */}
+        {isMinimized && (
+          <div
+            onClick={handleMinimize}
+            className="flex-1 p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                {hasNewMessages ? (
+                  <span className="text-green-600 font-semibold">New message received</span>
+                ) : (
+                  <span>Click to expand chat</span>
+                )}
               </div>
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="text-center">
-                <MessageSquare className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm text-gray-600">No messages yet</p>
-                <p className="text-xs text-gray-500">Start a conversation!</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {messages.map((message, index) => {
-                const showDate =
-                  index === 0 || formatDate(message.created_at) !== formatDate(messages[index - 1].created_at)
-
-                return (
-                  <div key={message.id}>
-                    {showDate && (
-                      <div className="flex justify-center my-4">
-                        <Badge variant="outline" className="text-xs">
-                          {formatDate(message.created_at)}
-                        </Badge>
-                      </div>
-                    )}
-
-                    <div className={cn("flex", message.direction === "outbound" ? "justify-end" : "justify-start")}>
-                      <div
-                        className={cn(
-                          "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                          message.direction === "outbound" ? "bg-green-500 text-white" : "bg-gray-100 text-gray-900",
-                        )}
-                      >
-                        {/* Check if message contains location data */}
-                        {(() => {
-                          try {
-                            // Try to parse as JSON (location objects from WhatsApp)
-                            const parsed = JSON.parse(message.body);
-                            if (parsed && (parsed.latitude || parsed.longitude || parsed.address)) {
-                              return (
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-lg">📍</span>
-                                    <span className="font-semibold">Location Shared</span>
-                                  </div>
-                                  {parsed.address && (
-                                    <div className="bg-white/80 dark:bg-gray-800/80 p-2 rounded text-xs">
-                                      <div className="font-medium mb-1">Address:</div>
-                                      <div className="text-gray-700 dark:text-gray-300">{parsed.address}</div>
-                                    </div>
-                                  )}
-                                  {(parsed.latitude || parsed.longitude) && (
-                                    <div className="text-xs opacity-80">
-                                      Coordinates: {parsed.latitude ? `${parsed.latitude}` : 'N/A'}, {parsed.longitude ? `${parsed.longitude}` : 'N/A'}
-                                    </div>
-                                  )}
-                                  {parsed.name && (
-                                    <div className="text-xs opacity-80">
-                                      Location Name: {parsed.name}
-                                    </div>
-                                  )}
-                                  <a
-                                    href={`https://www.google.com/maps?q=${parsed.latitude},${parsed.longitude}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs underline hover:opacity-80 inline-block mt-1"
-                                  >
-                                    View on Google Maps →
-                                  </a>
-                                </div>
-                              );
-                            }
-                          } catch (e) {
-                            // Not JSON, check if it's a location string pattern
-                            const locationPattern = /(?:location|address|coordinates?)[\s:]*([^\n]+)/i;
-                            const match = message.body.match(locationPattern);
-                            if (match) {
-                              return (
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-lg">📍</span>
-                                    <span className="font-semibold">Location</span>
-                                  </div>
-                                  <div className="bg-white/80 dark:bg-gray-800/80 p-2 rounded text-xs">
-                                    {match[1]}
-                                  </div>
-                                </div>
-                              );
-                            }
-                          }
-                          // Regular text message
-                          return <div className="whitespace-pre-wrap">{message.body}</div>;
-                        })()}
-                        <div className="flex items-center gap-2 mt-1">
-                          <div
-                            className={cn(
-                              "text-xs",
-                              message.direction === "outbound" ? "text-green-100" : "text-gray-500",
-                            )}
-                          >
-                            {formatTime(message.created_at)}
-                          </div>
-                          {message.is_order && (
-                            <Badge variant="secondary" className="text-xs h-4 px-1">
-                              🍽️
-                            </Badge>
-                          )}
-                          {message.message_type === 'location' && (
-                            <Badge variant="secondary" className="text-xs h-4 px-1">
-                              📍
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-              <div ref={messagesEndRef} />
-            </>
-          )}
-        </div>
-
-        {/* Error Message */}
-        {error && <div className="mx-4 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">{error}</div>}
-
-        {/* Message Input - COMPLETELY REDESIGNED */}
-        <div className="p-4 border-t bg-white">
-          <div className="flex gap-2 items-end">
-            {/* Text Input */}
-            <div className="flex-1">
-              <textarea
-                value={newMessage}
-                onChange={(e) => {
-                  console.log("Input changed:", e.target.value)
-                  setNewMessage(e.target.value)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    console.log("🎯 ENTER KEY PRESSED - CALLING SEND MESSAGE")
-                    sendMessage()
-                  }
-                }}
-                placeholder="Type a message..."
-                className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                rows={2}
-                maxLength={1000}
-                disabled={sending}
-              />
-              <div className="text-xs text-gray-500 mt-1">{newMessage.length}/1000 characters</div>
-            </div>
-
-            {/* Send Button - COMPLETELY NATIVE */}
-            <div className="flex flex-col items-center">
-              <button
-                onClick={() => {
-                  console.log("🎯 SEND BUTTON CLICKED!")
-                  sendMessage()
-                }}
-                disabled={!newMessage.trim() || sending}
-                className="w-12 h-12 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                style={{
-                  pointerEvents: sending || !newMessage.trim() ? "none" : "auto",
-                }}
-              >
-                {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-              </button>
-              <span className="text-xs text-gray-500 mt-1">{sending ? "Sending..." : "Send"}</span>
+              {hasNewMessages && (
+                <Badge variant="destructive" className="h-5 w-5 rounded-full p-0 flex items-center justify-center animate-pulse">
+                  !
+                </Badge>
+              )}
             </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        )}
+      </div>
+      )}
+    </div>
   )
 }

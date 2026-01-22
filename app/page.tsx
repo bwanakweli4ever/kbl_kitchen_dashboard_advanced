@@ -50,6 +50,7 @@ import { NotificationBadge } from "../components/notification-badge";
 import { RealTimeIndicator } from "../components/real-time-indicator";
 import { DeliveryMap, parseCoordinates } from "../components/delivery-map";
 import { OrderDetailModal } from "../components/order-detail-modal";
+import { ChatWidget } from "../components/chat-widget";
 import { reverseGeocode } from "@/lib/reverse-geocode";
 
 interface Order {
@@ -94,6 +95,7 @@ export default function KitchenDashboard() {
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [chatWidgetState, setChatWidgetState] = useState<{ open: boolean; waId: string; customerName: string } | null>(null);
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -1399,6 +1401,25 @@ ${receiverAddressSection}`;
                                     </>
                                   );
                                 })()}
+                                {/* Chat with Customer Button - Always Show */}
+                                {token && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setChatWidgetState({ 
+                                        open: true, 
+                                        waId: order.wa_id, 
+                                        customerName: order.profile_name 
+                                      });
+                                    }}
+                                    className="inline-flex items-center justify-center gap-2 px-5 py-3 text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg active:scale-95 touch-manipulation min-h-[48px] min-w-[140px]"
+                                    title="Chat with Customer"
+                                  >
+                                    <MessageSquare className="h-5 w-5" />
+                                    <span>Chat with Customer</span>
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2045,7 +2066,30 @@ ${receiverAddressSection}`;
           getBreadChoice={getBreadChoice}
           getSizeDisplayName={getSizeDisplayName}
           getSpiceLevel={getSpiceLevel}
+          onOpenChat={(waId, customerName) => {
+            setChatWidgetState({ open: true, waId, customerName });
+          }}
         />
+        
+        {/* Floating Chat Widget - rendered at page level */}
+        {chatWidgetState && token && (
+          <ChatWidget
+            customerName={chatWidgetState.customerName}
+            phoneNumber={chatWidgetState.waId}
+            token={token}
+            open={chatWidgetState.open}
+            onOpenChange={(open) => {
+              if (!open) {
+                setChatWidgetState(null);
+              } else {
+                setChatWidgetState({ ...chatWidgetState, open: true });
+              }
+            }}
+            onNewMessage={(message) => {
+              console.log("New message received:", message);
+            }}
+          />
+        )}
       </div>
     );
   }

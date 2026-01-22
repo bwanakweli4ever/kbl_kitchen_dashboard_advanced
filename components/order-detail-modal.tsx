@@ -18,9 +18,11 @@ import {
   ZoomIn,
   Utensils,
   Droplets,
-  Flame
+  Flame,
+  MessageSquare
 } from "lucide-react"
 import { config } from "@/lib/config"
+import { ChatWidget } from "./chat-widget"
 
 // Helper function to get stored token
 function getStoredToken(): string | null {
@@ -153,6 +155,7 @@ interface OrderDetailModalProps {
   getBreadChoice: (size: string | null | undefined, item?: any) => string
   getSizeDisplayName: (productName: string) => string
   getSpiceLevel: (level: string | null) => { color: string; icon: JSX.Element; label: string }
+  onOpenChat?: (waId: string, customerName: string) => void
 }
 
 export function OrderDetailModal({
@@ -164,6 +167,7 @@ export function OrderDetailModal({
   getBreadChoice,
   getSizeDisplayName,
   getSpiceLevel,
+  onOpenChat,
 }: OrderDetailModalProps) {
   const [ingredientsMap, setIngredientsMap] = useState<Record<string, string>>({})
   const [loadingIngredients, setLoadingIngredients] = useState(false)
@@ -445,10 +449,25 @@ export function OrderDetailModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[95vh] overflow-y-auto p-3 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="text-3xl font-bold text-center mb-4">
+        <DialogHeader className="relative">
+          <DialogTitle className="text-xl sm:text-2xl md:text-3xl font-bold mb-4 pr-32 sm:pr-0">
             Order #{order.id} - Kitchen View
           </DialogTitle>
+          {/* Chat button - positioned absolutely to always be visible */}
+          <Button
+            onClick={() => {
+              if (onOpenChat && order) {
+                onOpenChat(order.wa_id, order.profile_name)
+              }
+            }}
+            variant="default"
+            className="absolute top-0 right-0 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+            size="sm"
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="hidden sm:inline whitespace-nowrap">Chat with Customer</span>
+            <span className="sm:hidden">Chat</span>
+          </Button>
         </DialogHeader>
 
         <div className="space-y-6">
@@ -613,6 +632,7 @@ export function OrderDetailModal({
           )}
         </div>
       </DialogContent>
+      
     </Dialog>
   )
 }
