@@ -50,6 +50,7 @@ import { NotificationBadge } from "../components/notification-badge";
 import { RealTimeIndicator } from "../components/real-time-indicator";
 import { DeliveryMap, parseCoordinates } from "../components/delivery-map";
 import { OrderDetailModal } from "../components/order-detail-modal";
+import { reverseGeocode } from "@/lib/reverse-geocode";
 
 interface Order {
   id: number;
@@ -459,7 +460,74 @@ export default function KitchenDashboard() {
         ? order.wa_id 
         : `+${order.wa_id}`;
 
-      // Format delivery info text
+      // Get coordinates - prefer order coordinates, fallback to parsing from delivery_info
+      let latitude: number | null = order.delivery_latitude ?? null;
+      let longitude: number | null = order.delivery_longitude ?? null;
+      
+      // If no coordinates, try to parse from delivery_info
+      if ((latitude === null || longitude === null) && order.delivery_info) {
+        const parsed = parseCoordinates(order.delivery_info);
+        latitude = parsed.latitude;
+        longitude = parsed.longitude;
+      }
+
+      // Get detailed address information using reverse geocoding
+      let streetAddress = order.delivery_address || order.delivery_info || 'To be arranged';
+      let areaNeighborhood = '';
+      let cityDistrict = '';
+      
+      if (latitude !== null && longitude !== null && 
+          !isNaN(latitude) && !isNaN(longitude) &&
+          latitude >= -90 && latitude <= 90 &&
+          longitude >= -180 && longitude <= 180) {
+        try {
+          const addressDetails = await reverseGeocode(latitude, longitude);
+          if (addressDetails) {
+            // Format street address
+            if (addressDetails.houseNumber && addressDetails.street) {
+              streetAddress = `${addressDetails.houseNumber} ${addressDetails.street}`;
+            } else if (addressDetails.street) {
+              streetAddress = addressDetails.street;
+            } else if (order.delivery_address) {
+              streetAddress = order.delivery_address;
+            }
+            
+            // Get area/neighborhood
+            areaNeighborhood = addressDetails.neighborhood || addressDetails.suburb || '';
+            
+            // Format city/district
+            const cityParts: string[] = [];
+            if (addressDetails.city) cityParts.push(addressDetails.city);
+            if (addressDetails.district && addressDetails.district !== addressDetails.city) {
+              cityParts.push(addressDetails.district);
+            }
+            cityDistrict = cityParts.join(', ');
+          }
+        } catch (geocodeError) {
+          console.warn('Reverse geocoding failed, using fallback address:', geocodeError);
+        }
+      }
+
+      // Format delivery info text with detailed address
+      let receiverAddressSection = `Receiver Address:
+Street Address
+${streetAddress}`;
+      
+      if (areaNeighborhood) {
+        receiverAddressSection += `\nArea/Neighborhood
+${areaNeighborhood}`;
+      }
+      
+      if (cityDistrict) {
+        receiverAddressSection += `\nCity/District
+${cityDistrict}`;
+      }
+      
+      if (latitude !== null && longitude !== null) {
+        receiverAddressSection += `\nCoordinates
+${latitude}, ${longitude}`;
+      }
+
       const deliveryText = `Date: ${dateStr}
 KBL Coffee 
 
@@ -470,7 +538,7 @@ Location: 2 KG 182 ST
 
 Receiver: ${order.profile_name || order.wa_id}
 Phone: ${customerPhone}
-Location: ${order.delivery_info || 'To be arranged'}`;
+${receiverAddressSection}`;
 
       // Copy to clipboard
       await navigator.clipboard.writeText(deliveryText);
