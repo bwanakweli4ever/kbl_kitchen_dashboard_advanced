@@ -539,14 +539,13 @@ export function OrderDetailModal({
                               className={`${style.bgColor} ${style.textColor} rounded-xl sm:rounded-2xl shadow-lg sm:shadow-2xl ${style.shadow} hover:shadow-3xl hover:scale-105 transition-all duration-300 flex items-center justify-center min-h-[100px] sm:min-h-[120px] md:min-h-[140px] p-3 sm:p-4 md:p-6 border-2 border-black/10 overflow-hidden`}
                             >
                               <div className="text-center w-full px-2">
-                                <div className={`text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-extrabold capitalize break-words hyphens-auto overflow-wrap-anywhere`}
+                                <div className={`text-base sm:text-lg md:text-xl lg:text-2xl font-extrabold capitalize whitespace-nowrap overflow-hidden text-ellipsis`}
                                   style={{
                                     textShadow: style.textColor === 'text-white' 
                                       ? '2px 2px 4px rgba(0,0,0,0.5), 0 0 8px rgba(0,0,0,0.3)' 
-                                      : '1px 1px 2px rgba(0,0,0,0.2)',
-                                    wordBreak: 'break-word',
-                                    overflowWrap: 'break-word'
+                                      : '1px 1px 2px rgba(0,0,0,0.2)'
                                   }}
+                                  title={ingredientName}
                                 >
                                   {ingredientName}
                                 </div>
