@@ -540,58 +540,181 @@ Receiver: ${order.profile_name || order.wa_id}
 Phone: ${customerPhone}
 ${receiverAddressSection}`;
 
-      // Copy to clipboard with fallback for mobile devices
-      try {
-        // Try modern clipboard API first
-        if (navigator.clipboard && navigator.clipboard.writeText) {
+      // Copy to clipboard with improved fallback for mobile devices
+      let copySuccess = false;
+      
+      // Method 1: Try modern Clipboard API (works on HTTPS and secure contexts)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
           await navigator.clipboard.writeText(deliveryText);
-        } else {
-          // Fallback for older browsers/mobile
+          copySuccess = true;
+        } catch (clipboardError) {
+          console.warn('Clipboard API failed, trying fallback:', clipboardError);
+        }
+      }
+      
+      // Method 2: Fallback using textarea and execCommand (works on HTTP and mobile)
+      if (!copySuccess) {
+        try {
           const textArea = document.createElement('textarea');
           textArea.value = deliveryText;
+          // Make it visible but off-screen for better mobile compatibility
           textArea.style.position = 'fixed';
-          textArea.style.left = '-999999px';
-          textArea.style.top = '-999999px';
-          document.body.appendChild(textArea);
-          textArea.focus();
-          textArea.select();
+          textArea.style.top = '0';
+          textArea.style.left = '0';
+          textArea.style.width = '2em';
+          textArea.style.height = '2em';
+          textArea.style.padding = '0';
+          textArea.style.border = 'none';
+          textArea.style.outline = 'none';
+          textArea.style.boxShadow = 'none';
+          textArea.style.background = 'transparent';
+          textArea.style.opacity = '0';
+          textArea.style.zIndex = '-9999';
+          textArea.setAttribute('readonly', '');
+          textArea.setAttribute('aria-hidden', 'true');
           
-          try {
-            const successful = document.execCommand('copy');
-            if (!successful) {
-              throw new Error('execCommand copy failed');
+          document.body.appendChild(textArea);
+          
+          // For iOS devices
+          if (navigator.userAgent.match(/ipad|iphone/i)) {
+            const range = document.createRange();
+            range.selectNodeContents(textArea);
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(range);
             }
-          } finally {
-            document.body.removeChild(textArea);
+            textArea.setSelectionRange(0, 999999);
+          } else {
+            textArea.select();
+            textArea.setSelectionRange(0, 999999); // For mobile devices
           }
+          
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          
+          if (successful) {
+            copySuccess = true;
+          } else {
+            throw new Error('execCommand copy returned false');
+          }
+        } catch (execError) {
+          console.warn('execCommand fallback failed:', execError);
         }
+      }
+      
+      // Method 3: Show text in a modal/textarea for manual copy
+      if (!copySuccess) {
+        // Create a modal-like overlay with the text
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.right = '0';
+        overlay.style.bottom = '0';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.padding = '20px';
         
-        setSuccessMessage(`✅ Delivery info copied to clipboard for Order #${order.id}`);
-        setTimeout(() => setSuccessMessage(null), 3000);
-      } catch (clipboardError) {
-        console.error('Clipboard error:', clipboardError);
-        // If clipboard fails, show the text in an alert so user can copy manually
-        const userConfirmed = window.confirm(
-          `Failed to copy automatically. Here's the delivery info:\n\n${deliveryText}\n\nClick OK to try again or manually copy the text above.`
-        );
-        if (userConfirmed) {
-          // Try one more time
+        const modal = document.createElement('div');
+        modal.style.backgroundColor = 'white';
+        modal.style.borderRadius = '8px';
+        modal.style.padding = '20px';
+        modal.style.maxWidth = '90%';
+        modal.style.maxHeight = '80%';
+        modal.style.overflow = 'auto';
+        
+        const title = document.createElement('h3');
+        title.textContent = 'Copy Delivery Address';
+        title.style.marginBottom = '15px';
+        title.style.fontSize = '18px';
+        title.style.fontWeight = 'bold';
+        
+        const textArea = document.createElement('textarea');
+        textArea.value = deliveryText;
+        textArea.style.width = '100%';
+        textArea.style.minHeight = '200px';
+        textArea.style.padding = '10px';
+        textArea.style.border = '1px solid #ccc';
+        textArea.style.borderRadius = '4px';
+        textArea.style.fontSize = '14px';
+        textArea.style.fontFamily = 'monospace';
+        textArea.readOnly = true;
+        textArea.onclick = () => textArea.select();
+        
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.marginTop = '15px';
+        buttonContainer.style.display = 'flex';
+        buttonContainer.style.gap = '10px';
+        buttonContainer.style.justifyContent = 'flex-end';
+        
+        const copyButton = document.createElement('button');
+        copyButton.textContent = 'Copy Text';
+        copyButton.style.padding = '10px 20px';
+        copyButton.style.backgroundColor = '#10b981';
+        copyButton.style.color = 'white';
+        copyButton.style.border = 'none';
+        copyButton.style.borderRadius = '4px';
+        copyButton.style.cursor = 'pointer';
+        copyButton.onclick = () => {
+          textArea.select();
+          textArea.setSelectionRange(0, 999999);
           try {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              await navigator.clipboard.writeText(deliveryText);
+            document.execCommand('copy');
+            copyButton.textContent = 'Copied!';
+            copyButton.style.backgroundColor = '#059669';
+            setTimeout(() => {
+              document.body.removeChild(overlay);
               setSuccessMessage(`✅ Delivery info copied to clipboard for Order #${order.id}`);
               setTimeout(() => setSuccessMessage(null), 3000);
-            } else {
-              throw new Error('Clipboard API not available');
-            }
-          } catch (retryError) {
-            setError("Failed to copy. Please copy the text manually from the alert.");
-            setTimeout(() => setError(null), 8000);
+            }, 1000);
+          } catch (e) {
+            alert('Please manually select and copy the text above.');
           }
-        } else {
-          setError("Copy cancelled. Please use the text shown in the alert.");
-          setTimeout(() => setError(null), 5000);
-        }
+        };
+        
+        const closeButton = document.createElement('button');
+        closeButton.textContent = 'Close';
+        closeButton.style.padding = '10px 20px';
+        closeButton.style.backgroundColor = '#6b7280';
+        closeButton.style.color = 'white';
+        closeButton.style.border = 'none';
+        closeButton.style.borderRadius = '4px';
+        closeButton.style.cursor = 'pointer';
+        closeButton.onclick = () => {
+          document.body.removeChild(overlay);
+        };
+        
+        buttonContainer.appendChild(copyButton);
+        buttonContainer.appendChild(closeButton);
+        
+        modal.appendChild(title);
+        modal.appendChild(textArea);
+        modal.appendChild(buttonContainer);
+        overlay.appendChild(modal);
+        overlay.onclick = (e) => {
+          if (e.target === overlay) {
+            document.body.removeChild(overlay);
+          }
+        };
+        
+        document.body.appendChild(overlay);
+        textArea.focus();
+        textArea.select();
+        
+        setError("Please use the popup to copy the delivery address");
+        setTimeout(() => setError(null), 3000);
+        return; // Exit early since we're showing a modal
+      }
+      
+      // Success!
+      if (copySuccess) {
+        setSuccessMessage(`✅ Delivery info copied to clipboard for Order #${order.id}`);
+        setTimeout(() => setSuccessMessage(null), 3000);
       }
     } catch (err) {
       console.error('Error in copyDeliveryInfo:', err);
