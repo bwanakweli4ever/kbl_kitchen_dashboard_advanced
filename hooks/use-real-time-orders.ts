@@ -24,6 +24,11 @@ interface Order {
   payment_method?: string
   payment_status?: string
   payment_received_at?: string
+  rider_name?: string | null
+  rider_phone?: string | null
+  rider_assigned_at?: string | null
+  delivered_at?: string | null
+  delivery_comment?: string | null
 }
 
 interface UseRealTimeOrdersProps {
@@ -79,7 +84,12 @@ export function useRealTimeOrders({
           prevOrder.drinks !== newOrder.drinks ||
           prevOrder.order_source !== newOrder.order_source ||
           prevOrder.payment_status !== newOrder.payment_status ||
-          prevOrder.payment_method !== newOrder.payment_method
+          prevOrder.payment_method !== newOrder.payment_method ||
+          prevOrder.rider_name !== newOrder.rider_name ||
+          prevOrder.rider_phone !== newOrder.rider_phone ||
+          prevOrder.rider_assigned_at !== newOrder.rider_assigned_at ||
+          prevOrder.delivered_at !== newOrder.delivered_at ||
+          prevOrder.delivery_comment !== newOrder.delivery_comment
         )
       })
       
@@ -116,6 +126,35 @@ export function useRealTimeOrders({
         } else {
           setOrdersOptimized([])
           return
+        }
+        
+        // Debug: Log rider information in fetched orders
+        const ordersWithRiders = ordersArray.filter((o: any) => o.rider_name || o.rider_phone)
+        if (ordersWithRiders.length > 0) {
+          console.log(`🚴 RIDER DATA FETCHED - Found ${ordersWithRiders.length} orders with riders:`);
+          ordersWithRiders.forEach((o: any) => {
+            console.log(`   Order #${o.id}:`, {
+              rider_name: o.rider_name || 'MISSING',
+              rider_phone: o.rider_phone || 'MISSING',
+              rider_assigned_at: o.rider_assigned_at || 'MISSING'
+            });
+          });
+        } else {
+          console.log(`📦 No orders with rider data found in ${ordersArray.length} orders`);
+        }
+        
+        // Debug: Log all orders to check if rider fields are present
+        if (ordersArray.length > 0) {
+          const sampleOrder = ordersArray[0];
+          const hasRiderFields = 'rider_name' in sampleOrder && 'rider_phone' in sampleOrder;
+          console.log(`📦 Fetched ${ordersArray.length} orders. Rider fields present: ${hasRiderFields}`);
+          if (hasRiderFields) {
+            console.log(`   Sample order #${sampleOrder.id} rider data:`, {
+              rider_name: sampleOrder.rider_name,
+              rider_phone: sampleOrder.rider_phone,
+              rider_assigned_at: sampleOrder.rider_assigned_at
+            });
+          }
         }
 
         if (ordersArray.length > 0) {
@@ -258,6 +297,10 @@ export function useRealTimeOrders({
     if (!force && now - lastPollTimeRef.current < 3000) { // Minimum 3 seconds between manual refreshes (unless forced)
       console.log("Manual refresh skipped - too soon since last fetch")
       return
+    }
+    
+    if (force) {
+      console.log("🔄 Force refreshing orders (bypassing debounce)...")
     }
     
     setLoading(true) // Show loading for manual refresh

@@ -35,12 +35,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  ZoomIn
+  ZoomIn,
+  Truck
 } from "lucide-react";
 import { MessagesView } from "../components/messages-view";
 import { OrderStatusDialog } from "../components/order-status-dialog";
 import { CustomersTableView } from "../components/customers-table-view";
 import { DeliveredOrdersCalendarView as CompletedOrdersCalendarView } from "../components/delivered-orders-calendar-view";
+import { DeliveredOrdersView } from "../components/delivered-orders-view";
 import { OrdersChart } from "../components/orders-chart";
 import { ProductsManagement } from "../components/products-management";
 import { useNotifications } from "../hooks/use-notifications";
@@ -78,6 +80,11 @@ interface Order {
   payment_method?: string;
   payment_status?: string;
   payment_received_at?: string;
+  rider_name?: string | null;
+  rider_phone?: string | null;
+  rider_assigned_at?: string | null;
+  delivered_at?: string | null;
+  delivery_comment?: string | null;
 }
 
 export default function KitchenDashboard() {
@@ -164,14 +171,28 @@ export default function KitchenDashboard() {
   });
 
   // Refresh orders after status update (with debouncing)
-  const handleOrderStatusUpdated = useCallback(async () => {
-    // Only refresh if it's been more than 5 seconds since last fetch
+  const handleOrderStatusUpdated = useCallback(async (forceRefresh = false) => {
+    // Force refresh if requested (e.g., when rider is assigned), otherwise use debouncing
     const now = Date.now()
     const lastFetchTime = lastFetch ? lastFetch.getTime() : 0
-    if (now - lastFetchTime > 5000) {
-    await refreshOrders()
+    if (forceRefresh || now - lastFetchTime > 5000) {
+      await refreshOrders(forceRefresh)
     }
   }, [refreshOrders, lastFetch])
+  
+  // Sync selectedOrderForModal with orders array when orders update (to preserve rider info)
+  useEffect(() => {
+    if (selectedOrderForModal && orders.length > 0) {
+      const updatedOrder = orders.find(o => o.id === selectedOrderForModal.id)
+      if (updatedOrder && (
+        updatedOrder.rider_name !== selectedOrderForModal.rider_name ||
+        updatedOrder.rider_phone !== selectedOrderForModal.rider_phone ||
+        updatedOrder.rider_assigned_at !== selectedOrderForModal.rider_assigned_at
+      )) {
+        setSelectedOrderForModal(updatedOrder)
+      }
+    }
+  }, [orders, selectedOrderForModal])
 
   // Check for saved token on mount - extended session
   useEffect(() => {
@@ -355,11 +376,75 @@ export default function KitchenDashboard() {
     }
   };
 
-  const updateOrderStatus = async (orderId: number, status: string) => {
+  const updateOrderStatus = async (orderId: number, status: string, riderName?: string, riderPhone?: string, deliveryComment?: string) => {
     if (updatingOrders.has(orderId)) return;
     
     try {
       setUpdatingOrders(prev => new Set(prev).add(orderId));
+      
+      // If rider is being assigned, use the dedicated rider assignment endpoint
+      if (riderName || riderPhone) {
+        console.log(`🚴 Assigning rider via dedicated endpoint: ${riderName} (${riderPhone}) to order ${orderId}`);
+        
+        const riderRequestBody = {
+          rider_name: riderName || "",
+          rider_phone: riderPhone || "",
+          notify_customer: false
+        };
+        
+        const riderResponse = await fetch(`/api/orders/${orderId}/rider`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(riderRequestBody),
+        });
+        
+        const riderResponseData = await riderResponse.json().catch(() => ({}));
+        
+        console.log(`📡 Rider assignment response:`, riderResponse.status, riderResponse.statusText, riderResponseData);
+        
+        if (!riderResponse.ok) {
+          console.error(`❌ Failed to assign rider to order ${orderId}:`, riderResponse.status, riderResponseData);
+          throw new Error(riderResponseData.detail || `Failed to assign rider: ${riderResponse.statusText}`);
+        }
+        
+        console.log(`✅ Rider assigned successfully to order ${orderId}:`, riderResponseData);
+        
+        // Refresh orders immediately when rider is assigned (force refresh)
+        console.log(`🚴 RIDER ASSIGNED - Force refreshing orders after assignment...`);
+        console.log(`   - Rider Name: ${riderName}`);
+        console.log(`   - Rider Phone: ${riderPhone}`);
+        console.log(`   - Order ID: ${orderId}`);
+        // Wait a bit for the database to be updated
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await handleOrderStatusUpdated(true);
+        
+        // After refresh, verify the rider data is present
+        setTimeout(() => {
+          const updatedOrder = orders.find(o => o.id === orderId);
+          if (updatedOrder) {
+            console.log(`🔍 VERIFYING RIDER PERSISTENCE - Order ${orderId}:`);
+            console.log(`   - rider_name: ${updatedOrder.rider_name || 'MISSING'}`);
+            console.log(`   - rider_phone: ${updatedOrder.rider_phone || 'MISSING'}`);
+            console.log(`   - rider_assigned_at: ${updatedOrder.rider_assigned_at || 'MISSING'}`);
+            if (updatedOrder.rider_name && updatedOrder.rider_phone) {
+              console.log(`✅ RIDER DATA PERSISTED SUCCESSFULLY`);
+            } else {
+              console.error(`❌ RIDER DATA NOT FOUND AFTER REFRESH!`);
+            }
+          } else {
+            console.error(`❌ Order ${orderId} not found in orders array after refresh`);
+          }
+        }, 1000);
+        
+        return; // Exit early since rider assignment is complete
+      }
+      
+      // Otherwise, update order status normally
+      const requestBody: any = { status };
+      if (deliveryComment) requestBody.delivery_comment = deliveryComment;
       
       const response = await fetch(`/api/orders/${orderId}/status`, {
         method: "PUT",
@@ -367,19 +452,33 @@ export default function KitchenDashboard() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(requestBody),
       });
       
+      // Parse response once
+      const responseData = await response.json().catch(() => ({}));
+      
       if (response.ok) {
-        // Silent success - no error messages in production
-        // Refresh orders to immediately remove delivered/cancelled orders (debounced)
-        await handleOrderStatusUpdated();
-      } else if (response.status === 401) {
-        // Only logout on authentication failure - no error message
-        handleLogout();
+        console.log(`✅ Order ${orderId} status updated successfully:`, responseData);
+        const isDelivered = status?.toLowerCase() === "delivered";
+        if (isDelivered) {
+          removeOrderFromUI(orderId);
+          await handleOrderStatusUpdated(true);
+        } else {
+          await handleOrderStatusUpdated(false);
+        }
+      } else {
+        console.error(`❌ Failed to update order ${orderId}:`, response.status, responseData);
+        if (response.status === 401) {
+          // Only logout on authentication failure - no error message
+          handleLogout();
+        } else {
+          throw new Error(responseData.detail || `Failed to update order: ${response.statusText}`);
+        }
       }
     } catch (err) {
-      // Silent error handling - no error messages in production
+      console.error("❌ Error in updateOrderStatus:", err);
+      throw err; // Re-throw to let the modal handle it
     } finally {
       setUpdatingOrders(prev => {
         const newSet = new Set(prev);
@@ -401,13 +500,17 @@ export default function KitchenDashboard() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ status: "delivered" }),
+        body: JSON.stringify({ 
+          status: "delivered",
+          delivery_comment: deliveryComment || undefined
+        }),
       });
       
       if (response.ok) {
         // Silent success - no error messages in production
-        // Refresh orders to immediately remove delivered order (debounced)
-        await handleOrderStatusUpdated();
+        removeOrderFromUI(orderId);
+        // Refresh orders to immediately remove delivered order (force refresh)
+        await handleOrderStatusUpdated(true);
       } else if (response.status === 401) {
         // Only logout on authentication failure - no error message
         handleLogout();
@@ -420,6 +523,23 @@ export default function KitchenDashboard() {
         newSet.delete(orderId);
         return newSet;
       });
+    }
+  };
+
+  const removeOrderFromUI = (orderId: number) => {
+    setExpandedOrders(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(orderId);
+      return newSet;
+    });
+    setShowMultipleItems(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(orderId);
+      return newSet;
+    });
+    if (selectedOrderForModal?.id === orderId) {
+      setIsOrderModalOpen(false);
+      setSelectedOrderForModal(null);
     }
   };
 
@@ -475,10 +595,10 @@ export default function KitchenDashboard() {
         longitude = parsed.longitude;
       }
 
-      // Default values for Kigali area
-      let streetAddress = 'KG 106 Street';
-      let areaNeighborhood = 'Kimironko';
-      let cityDistrict = 'Kigali City, Gasabo District';
+      // Initialize address variables - will be set from reverse geocoding or delivery_info
+      let streetAddress: string | null = null;
+      let areaNeighborhood: string | null = null;
+      let cityDistrict: string | null = null;
       
       // Try to get detailed address information using reverse geocoding
       if (latitude !== null && longitude !== null && 
@@ -511,9 +631,43 @@ export default function KitchenDashboard() {
             }
           }
         } catch (geocodeError) {
-          console.warn('Reverse geocoding failed, using default address:', geocodeError);
-          // Use default values already set above
+          console.warn('Reverse geocoding failed:', geocodeError);
+          // Don't set default values - let it remain null
         }
+      }
+      
+      // If reverse geocoding didn't provide address, try to extract from delivery_info
+      if (!streetAddress && order.delivery_info) {
+        // Try to extract address from delivery_info text
+        const deliveryInfo = order.delivery_info.trim();
+        // If delivery_info contains readable text (not just coordinates), use it
+        if (deliveryInfo && !deliveryInfo.match(/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/)) {
+          // It's not just coordinates, might contain address info
+          const lines = deliveryInfo.split('\n').filter(line => line.trim());
+          if (lines.length > 0) {
+            streetAddress = lines[0].trim();
+          }
+        }
+      }
+      
+      // Only use fallback if we have absolutely no address information
+      if (!streetAddress && !areaNeighborhood && !cityDistrict) {
+        // Check if we have coordinates - if yes, show coordinates instead of fake address
+        if (latitude !== null && longitude !== null) {
+          streetAddress = `Coordinates: ${latitude}, ${longitude}`;
+          areaNeighborhood = 'Address details not available';
+          cityDistrict = 'Please use coordinates for navigation';
+        } else {
+          // No coordinates and no address - show a message
+          streetAddress = 'Address not provided';
+          areaNeighborhood = 'Please contact customer for delivery address';
+          cityDistrict = '';
+        }
+      } else {
+        // We have some address info, but fill in missing parts
+        if (!streetAddress) streetAddress = 'Address not specified';
+        if (!areaNeighborhood) areaNeighborhood = 'Area not specified';
+        if (!cityDistrict) cityDistrict = 'City not specified';
       }
 
       // Format delivery info text with detailed address - always show the format
@@ -1234,6 +1388,10 @@ ${receiverAddressSection}`;
               <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Completed</span>
           </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Order History</span>
+          </TabsTrigger>
         </TabsList>
         </div>
 
@@ -1420,6 +1578,7 @@ ${receiverAddressSection}`;
                                     <span>Chat with Customer</span>
                                   </button>
                                 )}
+                                
                               </div>
                             </div>
                           </div>
@@ -1428,76 +1587,6 @@ ${receiverAddressSection}`;
                             {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString()}
                           </div>
                         </div>
-                        
-                        {/* Order Type Badge - Show Preset Name or Custom */}
-                        {(() => {
-                          // Determine order type: preset or custom
-                          const isPreset = !!order.preset_name
-                          
-                          if (!isPreset) {
-                            // Custom order - show badge
-                            return (
-                              <div className="mb-3">
-                                <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 text-sm font-semibold">
-                                  🎨 Custom Order
-                                </Badge>
-                              </div>
-                            )
-                          }
-                          
-                          // For preset orders, show preset name with breakdown
-                          // Get preset details from order data
-                          const presetDetails = (() => {
-                            try {
-                              let items: any[] = [];
-                              if (order.items) {
-                                items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
-                              }
-                              if (items.length > 0) {
-                                return {
-                                  ingredients: items[0].ingredients || order.ingredients || [],
-                                  sauce: items[0].sauce || order.sauce || 'None',
-                                  spice: items[0].spice_level || order.spice_level || 'None'
-                                };
-                              }
-                              return {
-                                ingredients: order.ingredients || [],
-                                sauce: order.sauce || 'None',
-                                spice: order.spice_level || 'None'
-                              };
-                            } catch (e) {
-                              return {
-                                ingredients: order.ingredients || [],
-                                sauce: order.sauce || 'None',
-                                spice: order.spice_level || 'None'
-                              };
-                            }
-                          })();
-                          
-                          return (
-                            <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
-                              <div className="flex items-center gap-2 mb-3">
-                                <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-3 py-1 text-sm font-semibold">
-                                  📦 Preset: {order.preset_name}
-                                </Badge>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                                {presetDetails.sauce && presetDetails.sauce !== 'None' && (
-                                  <div>
-                                    <div className="text-xs text-gray-600 mb-1">🍯 Sauce</div>
-                                    <div className="font-semibold text-gray-800 capitalize">{presetDetails.sauce.replace('-', ' ')}</div>
-                                  </div>
-                                )}
-                                {presetDetails.spice && presetDetails.spice !== 'None' && (
-                                  <div>
-                                    <div className="text-xs text-gray-600 mb-1">🌶️ Spice Level</div>
-                                    <div className="font-semibold text-gray-800 capitalize">{presetDetails.spice}</div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })()}
                         
                         {/* Customer Info */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
@@ -1527,6 +1616,36 @@ ${receiverAddressSection}`;
                       </CardHeader>
 
                       <CardContent className="space-y-6 p-6 sm:p-7 md:p-8">
+                        {/* Rider Information Section - Prominent display on card */}
+                        {(order.rider_name || order.rider_phone) && (
+                          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 sm:p-5 border-2 border-blue-300 shadow-md">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Truck className="h-5 w-5 text-blue-600" />
+                              <h4 className="font-bold text-blue-900 text-base sm:text-lg">🚚 Delivery Rider Assigned</h4>
+                            </div>
+                            <div className="space-y-2">
+                              {order.rider_name && (
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4 text-blue-600" />
+                                  <span className="font-semibold text-gray-900 text-sm sm:text-base">Name: {order.rider_name}</span>
+                                </div>
+                              )}
+                              {order.rider_phone && (
+                                <div className="flex items-center gap-2">
+                                  <Phone className="h-4 w-4 text-blue-600" />
+                                  <span className="text-gray-700 text-sm sm:text-base">Phone: {order.rider_phone}</span>
+                                </div>
+                              )}
+                              {order.rider_assigned_at && (
+                                <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 mt-2 pt-2 border-t border-blue-200">
+                                  <Clock className="h-3 w-3" />
+                                  <span>Assigned: {new Date(order.rider_assigned_at).toLocaleString()}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
                         {/* Food Items - Table Format */}
                           <div className="bg-white rounded-xl p-6 sm:p-7 border-2 border-gray-200 shadow-sm">
                           <div className="flex items-center gap-3 mb-4">
@@ -2054,13 +2173,27 @@ ${receiverAddressSection}`;
         <TabsContent value="completed">
           <CompletedOrdersCalendarView token={token} />
         </TabsContent>
+
+        {/* Order History Tab */}
+        <TabsContent value="history">
+          <DeliveredOrdersView token={token} />
+        </TabsContent>
         </Tabs>
 
-        {/* Order Detail Modal */}
+        {/* Order Detail Modal - Always use latest order data from orders array */}
         <OrderDetailModal
-          order={selectedOrderForModal}
+          order={selectedOrderForModal ? (orders.find(o => o.id === selectedOrderForModal.id) || selectedOrderForModal) : null}
           open={isOrderModalOpen}
-          onOpenChange={setIsOrderModalOpen}
+          onOpenChange={(open) => {
+            setIsOrderModalOpen(open)
+            // When closing, update selectedOrder with latest data from orders array to preserve rider info
+            if (!open && selectedOrderForModal) {
+              const updatedOrder = orders.find(o => o.id === selectedOrderForModal.id)
+              if (updatedOrder) {
+                setSelectedOrderForModal(updatedOrder)
+              }
+            }
+          }}
           formatCurrency={formatCurrency}
           calculateOrderTotal={calculateOrderTotal}
           getBreadChoice={getBreadChoice}
@@ -2069,6 +2202,9 @@ ${receiverAddressSection}`;
           onOpenChat={(waId, customerName) => {
             setChatWidgetState({ open: true, waId, customerName });
           }}
+          onUpdateOrder={updateOrderStatus}
+          onOrderUpdated={handleOrderStatusUpdated}
+          token={token}
         />
         
         {/* Floating Chat Widget - rendered at page level */}

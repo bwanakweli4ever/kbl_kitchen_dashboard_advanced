@@ -9,6 +9,9 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { 
   User, 
   Phone, 
@@ -19,7 +22,9 @@ import {
   Utensils,
   Droplets,
   Flame,
-  MessageSquare
+  MessageSquare,
+  Truck,
+  Package
 } from "lucide-react"
 import { config } from "@/lib/config"
 import { ChatWidget } from "./chat-widget"
@@ -144,6 +149,11 @@ interface Order {
   preset_name?: string
   payment_status?: string
   payment_received_at?: string
+  rider_name?: string | null
+  rider_phone?: string | null
+  rider_assigned_at?: string | null
+  delivered_at?: string | null
+  delivery_comment?: string | null
 }
 
 interface OrderDetailModalProps {
@@ -156,6 +166,9 @@ interface OrderDetailModalProps {
   getSizeDisplayName: (productName: string) => string
   getSpiceLevel: (level: string | null) => { color: string; icon: JSX.Element; label: string }
   onOpenChat?: (waId: string, customerName: string) => void
+  onUpdateOrder?: (orderId: number, status: string, riderName?: string, riderPhone?: string, deliveryComment?: string) => Promise<void>
+  onOrderUpdated?: (forceRefresh?: boolean) => void
+  token?: string | null
 }
 
 export function OrderDetailModal({
@@ -168,9 +181,55 @@ export function OrderDetailModal({
   getSizeDisplayName,
   getSpiceLevel,
   onOpenChat,
+  onUpdateOrder,
+  onOrderUpdated,
+  token,
 }: OrderDetailModalProps) {
   const [ingredientsMap, setIngredientsMap] = useState<Record<string, string>>({})
   const [loadingIngredients, setLoadingIngredients] = useState(false)
+  const [riderName, setRiderName] = useState("")
+  const [riderPhone, setRiderPhone] = useState("")
+  const [deliveryComment, setDeliveryComment] = useState("")
+  const [isAssigningRider, setIsAssigningRider] = useState(false)
+  const [isMarkingDelivered, setIsMarkingDelivered] = useState(false)
+  const [showRiderForm, setShowRiderForm] = useState(false)
+  
+  // Load rider info when order changes
+  useEffect(() => {
+    if (order) {
+      const hasRider = !!(order.rider_name || order.rider_phone)
+      setRiderName(order.rider_name || "")
+      setRiderPhone(order.rider_phone || "")
+      setDeliveryComment(order.delivery_comment || "")
+      // Show form only if no rider is assigned
+      setShowRiderForm(!hasRider)
+      // Debug: Log order status to help troubleshoot
+      console.log("📦 Order Detail Modal - Order Data Loaded:", {
+        order_id: order.id,
+        status: order.status,
+        rider_name: order.rider_name || "None",
+        rider_phone: order.rider_phone || "None",
+        rider_assigned_at: order.rider_assigned_at || "None",
+        hasRider,
+        showRiderForm: !hasRider,
+        localState: {
+          riderName: order.rider_name || "",
+          riderPhone: order.rider_phone || ""
+        }
+      })
+      
+      // Verify rider data persistence
+      if (hasRider) {
+        console.log("✅ RIDER DATA PERSISTED - Modal loaded with rider info:", {
+          name: order.rider_name,
+          phone: order.rider_phone,
+          assigned_at: order.rider_assigned_at
+        });
+      } else {
+        console.log("⚠️ No rider data found in order object");
+      }
+    }
+  }, [order])
 
   // Fetch ingredients when modal opens
   useEffect(() => {
@@ -629,6 +688,272 @@ export function OrderDetailModal({
             <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border-2 border-purple-200">
               <div className="text-xl font-bold mb-2">Preset Order: {order.preset_name}</div>
             </div>
+          )}
+
+          {/* Rider Assignment Section - Always visible except when delivered */}
+          {order && order.status !== 'delivered' && (
+          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-6 border-2 border-blue-200 mt-6 sticky top-0 z-10">
+            <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Truck className="h-6 w-6" />
+              Delivery Rider Assignment
+            </h3>
+            
+            {/* Current Rider Info - Show if rider is assigned (from order prop or local state) */}
+            {((order.rider_name || order.rider_phone) || (riderName || riderPhone)) && (
+              <div className="mb-4 p-4 bg-white rounded-lg border border-blue-300">
+                <div className="text-sm font-semibold text-gray-600 mb-2">Current Rider:</div>
+                <div className="flex items-center gap-4 flex-wrap">
+                  {(order.rider_name || riderName) && (
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-blue-600" />
+                      <span className="font-semibold">{order.rider_name || riderName}</span>
+                    </div>
+                  )}
+                  {(order.rider_phone || riderPhone) && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-blue-600" />
+                      <span>{order.rider_phone || riderPhone}</span>
+                    </div>
+                  )}
+                </div>
+                {(order.rider_assigned_at || (order.rider_name || riderName)) && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    {order.rider_assigned_at ? (
+                      <>Assigned: {new Date(order.rider_assigned_at).toLocaleString()}</>
+                    ) : (
+                      <>Rider assigned (time not available)</>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Delivery Status */}
+            {order.delivered_at && (
+              <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-300">
+                <div className="flex items-center gap-2 text-green-700 font-semibold mb-3">
+                  <CheckCircle className="h-5 w-5" />
+                  <span className="text-lg">Order Delivered</span>
+                </div>
+                <div className="text-sm text-gray-700 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-green-600" />
+                    <span className="font-semibold">Delivered at:</span>
+                    <span>{new Date(order.delivered_at).toLocaleString()}</span>
+                  </div>
+                  {order.rider_assigned_at && (
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-green-600" />
+                      <span className="font-semibold">Rider assigned at:</span>
+                      <span>{new Date(order.rider_assigned_at).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {order.rider_assigned_at && order.delivered_at && (
+                    (() => {
+                      const deliveryTimeMs = new Date(order.delivered_at).getTime() - new Date(order.rider_assigned_at).getTime();
+                      const deliveryTimeMinutes = Math.round(deliveryTimeMs / (1000 * 60));
+                      const deliveryTimeHours = Math.floor(deliveryTimeMinutes / 60);
+                      const remainingMinutes = deliveryTimeMinutes % 60;
+                      const timeDisplay = deliveryTimeHours > 0 
+                        ? `${deliveryTimeHours}h ${remainingMinutes}m`
+                        : `${deliveryTimeMinutes} minutes`;
+                      
+                      return (
+                        <div className="mt-3 pt-3 border-t border-green-200">
+                          <div className="flex items-center gap-2 text-base font-bold text-green-800">
+                            <Clock className="h-5 w-5" />
+                            <span>Total Delivery Time: {timeDisplay}</span>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            From assignment to delivery completion
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
+                </div>
+                {order.delivery_comment && (
+                  <div className="mt-3 pt-3 border-t border-green-200">
+                    <div className="text-sm font-semibold text-gray-700 mb-1">Delivery Comment:</div>
+                    <div className="text-sm text-gray-600 bg-white p-2 rounded border border-green-200">
+                      {order.delivery_comment}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Rider Assignment Form - Only show if no rider assigned or user wants to change */}
+            {showRiderForm ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="riderName">Rider Name</Label>
+                    <Input
+                      id="riderName"
+                      value={riderName}
+                      onChange={(e) => setRiderName(e.target.value)}
+                      placeholder="Enter rider name"
+                      className="bg-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="riderPhone">Rider Phone</Label>
+                    <Input
+                      id="riderPhone"
+                      value={riderPhone}
+                      onChange={(e) => setRiderPhone(e.target.value)}
+                      placeholder="Enter rider phone number"
+                      className="bg-white"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button
+                    onClick={async () => {
+                      if (!riderName || !riderPhone) {
+                        console.error("❌ Rider name or phone is missing");
+                        return;
+                      }
+                      if (!onUpdateOrder) {
+                        console.error("❌ onUpdateOrder function is not provided");
+                        return;
+                      }
+                      if (!order || !order.id) {
+                        console.error("❌ Order or order.id is missing");
+                        return;
+                      }
+                      
+                      console.log(`🚴 Starting rider assignment for order ${order.id}:`, {
+                        riderName,
+                        riderPhone,
+                        orderStatus: order.status,
+                        hasOnUpdateOrder: !!onUpdateOrder
+                      });
+                      
+                      setIsAssigningRider(true)
+                      try {
+                        console.log(`📤 Calling onUpdateOrder with:`, {
+                          orderId: order.id,
+                          status: order.status,
+                          riderName,
+                          riderPhone
+                        });
+                        
+                        await onUpdateOrder(order.id, order.status, riderName, riderPhone)
+                        
+                        console.log(`✅ onUpdateOrder completed successfully`);
+                        
+                        // Update order object to reflect the change immediately
+                        if (order) {
+                          order.rider_name = riderName
+                          order.rider_phone = riderPhone
+                          order.rider_assigned_at = new Date().toISOString()
+                          console.log(`📝 Updated local order object:`, {
+                            rider_name: order.rider_name,
+                            rider_phone: order.rider_phone,
+                            rider_assigned_at: order.rider_assigned_at
+                          });
+                        }
+                        // Hide form and show rider info
+                        setShowRiderForm(false)
+                        // Clear form fields
+                        setRiderName("")
+                        setRiderPhone("")
+                        // Notify parent to refresh order list immediately (force refresh)
+                        if (onOrderUpdated) {
+                          console.log(`🔄 Calling onOrderUpdated(true) to force refresh`);
+                          // Call with force flag to bypass debounce
+                          onOrderUpdated(true)
+                        } else {
+                          console.warn("⚠️ onOrderUpdated is not provided");
+                        }
+                      } catch (error) {
+                        console.error("❌ Failed to assign rider:", error)
+                        alert(`Failed to assign rider: ${error instanceof Error ? error.message : String(error)}`)
+                      } finally {
+                        setIsAssigningRider(false)
+                      }
+                    }}
+                    disabled={!riderName || !riderPhone || isAssigningRider}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Truck className="h-4 w-4 mr-2" />
+                    {isAssigningRider ? "Assigning..." : "Assign Rider"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              /* Show edit button if rider is assigned OR if we have rider data in local state */
+              ((order.rider_name || order.rider_phone) || (riderName || riderPhone)) && (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      // Pre-fill form with current rider info (from order prop or local state)
+                      setRiderName(order.rider_name || riderName || "")
+                      setRiderPhone(order.rider_phone || riderPhone || "")
+                      // Show form to allow editing
+                      setShowRiderForm(true)
+                      console.log("📝 Opening rider form with:", {
+                        riderName: order.rider_name || riderName,
+                        riderPhone: order.rider_phone || riderPhone
+                      })
+                    }}
+                    variant="outline"
+                    className="bg-white hover:bg-gray-50"
+                  >
+                    <Truck className="h-4 w-4 mr-2" />
+                    Change Rider
+                  </Button>
+                </div>
+              )
+            )}
+
+            {/* Mark as Delivered Section */}
+            {order.status !== 'delivered' && (
+              <div className="mt-6 pt-6 border-t border-blue-300">
+                <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Mark as Delivered
+                </h4>
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="deliveryComment">Delivery Comment (Optional)</Label>
+                    <Textarea
+                      id="deliveryComment"
+                      value={deliveryComment}
+                      onChange={(e) => setDeliveryComment(e.target.value)}
+                      placeholder="Add any notes about the delivery..."
+                      className="bg-white min-h-[80px]"
+                    />
+                  </div>
+                  <Button
+                    onClick={async () => {
+                      if (!onUpdateOrder) return
+                      setIsMarkingDelivered(true)
+                      try {
+                        await onUpdateOrder(order.id, "delivered", undefined, undefined, deliveryComment)
+                        if (onOrderUpdated) {
+                          onOrderUpdated(true)
+                        }
+                        onOpenChange(false)
+                      } catch (error) {
+                        console.error("Failed to mark as delivered:", error)
+                      } finally {
+                        setIsMarkingDelivered(false)
+                      }
+                    }}
+                    disabled={isMarkingDelivered}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {isMarkingDelivered ? "Marking..." : "Mark as Delivered"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
           )}
         </div>
       </DialogContent>

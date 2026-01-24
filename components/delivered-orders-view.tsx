@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { User, Phone, CheckCircle, RefreshCw, Utensils, Clock, Search, Package, Copy } from "lucide-react"
+import { User, Phone, CheckCircle, RefreshCw, Clock, Search, Package, Copy, Truck, Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { reverseGeocode } from "@/lib/reverse-geocode"
 import { parseCoordinates } from "./delivery-map"
@@ -28,6 +30,13 @@ interface Order {
   customer_total_orders: number
   created_at: string
   updated_at: string
+  items?: string
+  drinks?: string
+  rider_name?: string | null
+  rider_phone?: string | null
+  rider_assigned_at?: string | null
+  delivered_at?: string | null
+  delivery_comment?: string | null
 }
 
 interface DeliveredOrdersViewProps {
@@ -39,7 +48,12 @@ export function DeliveredOrdersView({ token }: DeliveredOrdersViewProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [riderFilter, setRiderFilter] = useState("")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   const copyDeliveryInfo = async (order: Order) => {
     try {
@@ -207,8 +221,26 @@ ${receiverAddressSection}`;
     }
   }
 
-  const getSpiceLevel = (level: string) => {
-    switch (level.toLowerCase()) {
+  const getDeliveredAt = (order: Order) => order.delivered_at || order.updated_at
+
+  const getDeliveryTimeMinutes = (order: Order) => {
+    if (!order.rider_assigned_at || !order.delivered_at) return null
+    const assigned = new Date(order.rider_assigned_at).getTime()
+    const delivered = new Date(order.delivered_at).getTime()
+    if (Number.isNaN(assigned) || Number.isNaN(delivered)) return null
+    return Math.max(0, Math.round((delivered - assigned) / (1000 * 60)))
+  }
+
+  const formatDeliveryTime = (minutes: number | null) => {
+    if (minutes === null) return "N/A"
+    const hours = Math.floor(minutes / 60)
+    const remaining = minutes % 60
+    return hours > 0 ? `${hours}h ${remaining}m` : `${minutes} minutes`
+  }
+
+  const getSpiceLevel = (level: string | null | undefined) => {
+    const normalized = (level || "None").toString().toLowerCase()
+    switch (normalized) {
       case "mild":
         return { color: "bg-green-100 text-green-800", label: "Mild" }
       case "medium":
@@ -216,43 +248,41 @@ ${receiverAddressSection}`;
       case "hot":
         return { color: "bg-red-100 text-red-800", label: "Hot" }
       default:
-        return { color: "bg-gray-100 text-gray-800", label: level }
+        return { color: "bg-gray-100 text-gray-800", label: level || "None" }
     }
   }
 
-  const categorizeIngredients = (ingredients: string[]) => {
-    const proteins = ingredients.filter((ingredient) =>
-      ["chicken", "beef", "turkey", "bacon", "fish", "tuna", "salmon"].includes(ingredient.toLowerCase()),
-    )
+  const normalizeIngredient = (ingredient: string | null | undefined) =>
+    (ingredient || "").toString().trim()
 
-    const vegetables = ingredients.filter((ingredient) =>
-      [
-        "tomatoes",
-        "cucumber",
-        "red-pepper",
-        "green-pepper",
-        "yellow-pepper",
-        "white-onion",
-        "red-onion",
-        "lettuce",
-        "spinach",
-        "avocado",
-      ].includes(ingredient.toLowerCase()),
-    )
-
-    const others = ingredients.filter(
-      (ingredient) => !proteins.includes(ingredient) && !vegetables.includes(ingredient),
-    )
-
-    return { proteins, vegetables, others }
+  const getOrderSummary = (order: Order) => {
+    const size = order.size || "N/A"
+    const qty = order.quantity || 0
+    return `${size} × ${qty}`
   }
 
-  const filteredOrders = orders.filter(
-    (order) =>
-      order.profile_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  const filteredOrders = orders.filter((order) => {
+    const term = searchTerm.toLowerCase()
+    const riderTerm = riderFilter.toLowerCase()
+    const deliveredAt = new Date(getDeliveredAt(order))
+
+    const matchesSearch =
+      order.profile_name.toLowerCase().includes(term) ||
       order.wa_id.includes(searchTerm) ||
-      order.id.toString().includes(searchTerm),
-  )
+      order.id.toString().includes(searchTerm) ||
+      (order.rider_name || "").toLowerCase().includes(term) ||
+      (order.rider_phone || "").includes(searchTerm)
+
+    const matchesRider =
+      riderTerm.length === 0 ||
+      (order.rider_name || "").toLowerCase().includes(riderTerm) ||
+      (order.rider_phone || "").includes(riderFilter)
+
+    const fromOk = dateFrom ? deliveredAt >= new Date(`${dateFrom}T00:00:00`) : true
+    const toOk = dateTo ? deliveredAt <= new Date(`${dateTo}T23:59:59`) : true
+
+    return matchesSearch && matchesRider && fromOk && toOk
+  })
 
   if (loading) {
     return (
@@ -289,23 +319,32 @@ ${receiverAddressSection}`;
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="max-w-md">
+      {/* Filters */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search by order ID, customer name, or phone..."
+            placeholder="Search by order ID, customer, phone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
           />
+        </div>
+        <Input
+          placeholder="Filter by rider name or phone..."
+          value={riderFilter}
+          onChange={(e) => setRiderFilter(e.target.value)}
+        />
+        <div className="flex gap-2">
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </div>
       </div>
 
       {/* Error Message */}
       {error && <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-red-700">{error}</div>}
 
-      {/* Orders Grid */}
+      {/* Orders Table */}
       {filteredOrders.length === 0 && !loading && !error && (
         <div className="text-center py-12">
           <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
@@ -318,176 +357,154 @@ ${receiverAddressSection}`;
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredOrders.map((order) => {
-          const spiceLevel = getSpiceLevel(order.spice_level)
-          const { proteins, vegetables, others } = categorizeIngredients(order.ingredients)
-
-          return (
-            <Card
-              key={order.id}
-              className="shadow-lg hover:shadow-xl transition-shadow border-l-4 border-l-green-500 bg-white"
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-bold text-gray-800">Order #{order.id}</CardTitle>
-                  <Badge className="bg-green-500 text-white flex items-center gap-1">
-                    <CheckCircle className="h-4 w-4" />
-                    Delivered
-                  </Badge>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <User className="h-4 w-4" />
-                    <span className="font-medium">{order.profile_name}</span>
-                    <Badge variant="outline" className="text-xs">
-                      {order.customer_total_orders} orders
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Phone className="h-4 w-4" />
-                    <span>{order.wa_id}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Clock className="h-4 w-4" />
-                    <span>Delivered: {formatDate(order.updated_at)}</span>
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Order Summary */}
-                <div className="bg-green-50 p-3 rounded-lg border-l-2 border-green-300">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Utensils className="h-4 w-4 text-green-600" />
-                      <span className="font-semibold text-green-800">
-                        {order.size} Sandwich × {order.quantity}
-                      </span>
-                    </div>
-                    <span className="font-bold text-green-600">{formatCurrency(order.food_total)}</span>
-                  </div>
-                </div>
-
-                {/* Ingredients Summary */}
-                <div>
-                  <h4 className="font-semibold text-green-700 mb-2 flex items-center gap-1">
-                    🥬 Ingredients ({order.ingredients.length})
-                  </h4>
-
-                  <div className="space-y-2">
-                    {/* Proteins */}
-                    {proteins.length > 0 && (
-                      <div>
-                        <div className="text-xs font-medium text-red-700 mb-1">🍖 PROTEINS</div>
-                        <div className="flex flex-wrap gap-1">
-                          {proteins.map((protein, idx) => (
-                            <Badge key={idx} className="bg-red-100 text-red-800 text-xs">
-                              {protein.replace("-", " ")}
-                            </Badge>
-                          ))}
-                        </div>
+      {filteredOrders.length > 0 && (
+        <div className="border rounded-lg overflow-hidden bg-white">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Order</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Items</TableHead>
+                <TableHead>Spice</TableHead>
+                <TableHead>Sauce</TableHead>
+                <TableHead>Rider</TableHead>
+                <TableHead>Delivered At</TableHead>
+                <TableHead>Delivery Time</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredOrders.map((order) => {
+                const spiceLevel = getSpiceLevel(order.spice_level)
+                const deliveryTime = formatDeliveryTime(getDeliveryTimeMinutes(order))
+                return (
+                  <TableRow key={order.id}>
+                    <TableCell className="font-semibold">#{order.id}</TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium text-gray-800">{order.profile_name || "Unknown"}</div>
+                      <div className="text-xs text-gray-500">{order.wa_id}</div>
+                    </TableCell>
+                    <TableCell className="text-sm">{getOrderSummary(order)}</TableCell>
+                    <TableCell>
+                      <Badge className={cn("text-xs", spiceLevel.color)}>{spiceLevel.label}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {(order.sauce || "None").toString().replace("-", " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm text-gray-700">
+                        {order.rider_name || "N/A"}
+                        {order.rider_phone ? ` (${order.rider_phone})` : ""}
                       </div>
-                    )}
-
-                    {/* Vegetables */}
-                    {vegetables.length > 0 && (
-                      <div>
-                        <div className="text-xs font-medium text-green-700 mb-1">🥗 VEGETABLES</div>
-                        <div className="flex flex-wrap gap-1">
-                          {vegetables.slice(0, 4).map((vegetable, idx) => (
-                            <Badge key={idx} variant="outline" className="text-xs">
-                              {vegetable.replace("-", " ")}
-                            </Badge>
-                          ))}
-                          {vegetables.length > 4 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{vegetables.length - 4} more
-                            </Badge>
-                          )}
-                        </div>
+                    </TableCell>
+                    <TableCell className="text-sm">{formatDate(getDeliveredAt(order))}</TableCell>
+                    <TableCell className="text-sm">{deliveryTime}</TableCell>
+                    <TableCell className="font-semibold text-green-700">
+                      {formatCurrency(order.food_total)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-1"
+                          onClick={() => {
+                            setSelectedOrder(order)
+                            setIsDetailOpen(true)
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                          Details
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex items-center gap-1 bg-green-600 hover:bg-green-700"
+                          onClick={() => copyDeliveryInfo(order)}
+                        >
+                          <Copy size={14} />
+                          Copy
+                        </Button>
                       </div>
-                    )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-                    {/* Others */}
-                    {others.length > 0 && (
-                      <div>
-                        <div className="text-xs font-medium text-blue-700 mb-1">🧀 OTHERS</div>
-                        <div className="flex flex-wrap gap-1">
-                          {others.slice(0, 3).map((other, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
-                              {other.replace("-", " ")}
-                            </Badge>
-                          ))}
-                          {others.length > 3 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{others.length - 3} more
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+      {/* Order Detail Dialog */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Order #{selectedOrder?.id} Details</DialogTitle>
+          </DialogHeader>
 
-                {/* Sauce & Spice Level */}
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-purple-700 mb-1 text-sm">🍯 Sauce</h4>
-                    <Badge variant="outline" className="text-xs">
-                      {order.sauce.replace("-", " ")}
-                    </Badge>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-red-700 mb-1 text-sm">🌶️ Spice</h4>
-                    <Badge className={cn("text-xs", spiceLevel.color)}>{spiceLevel.label}</Badge>
-                  </div>
-                </div>
-
-                {/* Delivery Info */}
-                {order.delivery_info && (
-                  <div>
-                    <h4 className="font-semibold text-blue-700 mb-1 text-sm">🚚 Delivery</h4>
-                    <div className="bg-blue-50 p-2 rounded text-xs border border-blue-200 text-blue-800 mb-2">
-                      {order.delivery_info}
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_info)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors font-medium"
-                      >
-                        <span>📍</span>
-                        Open in Maps
-                      </a>
-                      <Button
-                        onClick={() => copyDeliveryInfo(order)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors font-medium"
-                      >
-                        <Copy size={14} />
-                        Copy Delivery Info
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Order Timeline */}
+          {selectedOrder && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-gray-50 p-3 rounded-lg">
-                  <h4 className="font-semibold text-gray-700 mb-2 text-sm">📅 Order Timeline</h4>
-                  <div className="space-y-1 text-xs text-gray-600">
-                    <div>Ordered: {formatDate(order.created_at)}</div>
-                    <div>Delivered: {formatDate(order.updated_at)}</div>
+                  <div className="text-xs text-gray-500 mb-1">Customer</div>
+                  <div className="font-semibold text-gray-800">{selectedOrder.profile_name}</div>
+                  <div className="text-sm text-gray-600">{selectedOrder.wa_id}</div>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <div className="text-xs text-gray-500 mb-1">Order</div>
+                  <div className="text-sm text-gray-700">
+                    {selectedOrder.size} × {selectedOrder.quantity}
+                  </div>
+                  <div className="text-sm text-gray-700">Total: {formatCurrency(selectedOrder.food_total)}</div>
+                </div>
+              </div>
+
+              <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                <div className="flex items-center gap-2 font-semibold text-green-800 mb-2">
+                  <CheckCircle className="h-4 w-4" />
+                  Delivered
+                </div>
+                <div className="text-sm text-gray-700 space-y-1">
+                  <div>Delivered at: {formatDate(getDeliveredAt(selectedOrder))}</div>
+                  {selectedOrder.rider_assigned_at && (
+                    <div>Rider assigned at: {formatDate(selectedOrder.rider_assigned_at)}</div>
+                  )}
+                  <div>Delivery time: {formatDeliveryTime(getDeliveryTimeMinutes(selectedOrder))}</div>
+                </div>
+              </div>
+
+              {(selectedOrder.rider_name || selectedOrder.rider_phone) && (
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 font-semibold text-blue-800 mb-2">
+                    <Truck className="h-4 w-4" />
+                    Assigned Rider
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    <div>Name: {selectedOrder.rider_name || "N/A"}</div>
+                    <div>Phone: {selectedOrder.rider_phone || "N/A"}</div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+              )}
+
+              {selectedOrder.delivery_comment && (
+                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                  <div className="text-xs text-yellow-700 mb-1">Delivery Comment</div>
+                  <div className="text-sm text-gray-700">{selectedOrder.delivery_comment}</div>
+                </div>
+              )}
+
+              {selectedOrder.delivery_info && (
+                <div className="bg-white p-3 rounded-lg border border-gray-200">
+                  <div className="text-xs text-gray-500 mb-1">Delivery Info</div>
+                  <div className="text-sm text-gray-700">{selectedOrder.delivery_info}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
