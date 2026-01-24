@@ -267,8 +267,8 @@ ${receiverAddressSection}`;
     const deliveredAt = new Date(getDeliveredAt(order))
 
     const matchesSearch =
-      order.profile_name.toLowerCase().includes(term) ||
-      order.wa_id.includes(searchTerm) ||
+      (order.profile_name || "").toLowerCase().includes(term) ||
+      (order.wa_id || "").includes(searchTerm) ||
       order.id.toString().includes(searchTerm) ||
       (order.rider_name || "").toLowerCase().includes(term) ||
       (order.rider_phone || "").includes(searchTerm)
