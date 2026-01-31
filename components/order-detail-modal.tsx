@@ -154,6 +154,8 @@ interface Order {
   rider_assigned_at?: string | null
   delivered_at?: string | null
   delivery_comment?: string | null
+  pickup_type?: string | null
+  customer_here_at?: string | null
 }
 
 interface OrderDetailModalProps {
@@ -165,6 +167,7 @@ interface OrderDetailModalProps {
   getBreadChoice: (size: string | null | undefined, item?: any) => string
   getSizeDisplayName: (productName: string) => string
   getSpiceLevel: (level: string | null) => { color: string; icon: JSX.Element; label: string }
+  parseCoffeeItem?: (item: any) => { isCoffee: boolean; type: string; sugarDisplay: string }
   onOpenChat?: (waId: string, customerName: string) => void
   onUpdateOrder?: (orderId: number, status: string, riderName?: string, riderPhone?: string, deliveryComment?: string) => Promise<void>
   onOrderUpdated?: (forceRefresh?: boolean) => void
@@ -180,6 +183,7 @@ export function OrderDetailModal({
   getBreadChoice,
   getSizeDisplayName,
   getSpiceLevel,
+  parseCoffeeItem,
   onOpenChat,
   onUpdateOrder,
   onOrderUpdated,
@@ -459,6 +463,7 @@ export function OrderDetailModal({
       }]
     } else {
       items = items.map((item: any) => ({
+        name: item.name || '',
         size: item.size || order.size || '',
         quantity: item.quantity || order.quantity || 1,
         ingredients: (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0) 
@@ -530,6 +535,23 @@ export function OrderDetailModal({
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Drive & Pick / Coffee order: Pickup type + PAID / CUSTOMER HERE */}
+          {(order.pickup_type || order.customer_here_at) && (
+            <div className="bg-amber-50 rounded-lg p-4 border-2 border-amber-300 flex flex-wrap items-center gap-3">
+              {order.pickup_type && (
+                <Badge variant="secondary" className="text-sm">
+                  Pickup: {order.pickup_type === 'bring_to_street' ? 'Bring to Street' : order.pickup_type === 'i_will_pick' ? 'I Will Pick' : order.pickup_type}
+                </Badge>
+              )}
+              {order.payment_status === 'paid' && (
+                <Badge className="bg-green-600">PAID</Badge>
+              )}
+              {order.customer_here_at && (
+                <Badge className="bg-orange-600 text-lg px-4 py-1">CUSTOMER HERE</Badge>
+              )}
+            </div>
+          )}
+
           {/* Food Items - Large Format for Kitchen */}
           <div className="bg-white rounded-lg p-6 border-2 border-gray-200">
             <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
@@ -544,6 +566,7 @@ export function OrderDetailModal({
                     ? order.ingredients
                     : [])
               
+              const coffeeParsed = parseCoffeeItem ? parseCoffeeItem(item) : { isCoffee: false, type: '', sugarDisplay: '' }
               let rawSize = item.size || order.size
               if (!rawSize || rawSize === 'N/A' || rawSize.trim() === '') {
                 rawSize = order.size
@@ -591,12 +614,19 @@ export function OrderDetailModal({
                 <div key={idx} className="mb-8 p-6 bg-gradient-to-br from-blue-50 to-green-50 rounded-xl border-2 border-blue-300">
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-3xl font-bold text-gray-800">
-                      Item #{idx + 1} - {displaySize}
+                      Item #{idx + 1} - {coffeeParsed.isCoffee ? coffeeParsed.type : displaySize}
                     </div>
                     <div className="text-2xl font-bold text-green-600">
                       ×{item.quantity || order.quantity || 1}
                     </div>
                   </div>
+
+                  {/* Coffee: Sugar (teaspoons) */}
+                  {coffeeParsed.isCoffee && (
+                    <div className="mb-6 p-4 bg-amber-50 rounded-lg border-2 border-amber-300">
+                      <div className="text-xl font-bold text-amber-800">{coffeeParsed.sugarDisplay}</div>
+                    </div>
+                  )}
 
                   {/* Ingredients - Large and Easy to Read with Images */}
                   <div className="mb-6">

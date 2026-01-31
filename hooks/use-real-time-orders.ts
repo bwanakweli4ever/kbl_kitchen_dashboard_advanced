@@ -29,6 +29,8 @@ interface Order {
   rider_assigned_at?: string | null
   delivered_at?: string | null
   delivery_comment?: string | null
+  pickup_type?: string | null
+  customer_here_at?: string | null
 }
 
 interface UseRealTimeOrdersProps {
@@ -57,6 +59,19 @@ export function useRealTimeOrders({
   // Refs for tracking order changes
   const lastOrderIdsRef = useRef<Set<number>>(new Set())
   const previousOrdersRef = useRef<Order[]>([])
+  const customerHerePlayedRef = useRef<Set<number>>(new Set())
+
+  // Play "customer here" sound at kitchen when an order gets customer_here_at set
+  const playCustomerHereSound = useCallback(() => {
+    if (typeof window === "undefined") return
+    try {
+      const audio = new Audio("/sounds/here.wav")
+      audio.volume = 1
+      audio.play().catch((e) => console.warn("Kitchen here.wav play failed:", e))
+    } catch (e) {
+      console.warn("Kitchen here.wav error:", e)
+    }
+  }, [])
 
   // Smooth state update - only update if there are actual changes
   const setOrdersOptimized = useCallback((newOrders: Order[]) => {
@@ -89,7 +104,8 @@ export function useRealTimeOrders({
           prevOrder.rider_phone !== newOrder.rider_phone ||
           prevOrder.rider_assigned_at !== newOrder.rider_assigned_at ||
           prevOrder.delivered_at !== newOrder.delivered_at ||
-          prevOrder.delivery_comment !== newOrder.delivery_comment
+          prevOrder.delivery_comment !== newOrder.delivery_comment ||
+          prevOrder.customer_here_at !== (newOrder as Order & { customer_here_at?: string | null }).customer_here_at
         )
       })
       
@@ -193,6 +209,17 @@ export function useRealTimeOrders({
               const previousOrder = previousOrdersRef.current.find((o) => o.id === order.id)
               if (previousOrder && previousOrder.status !== order.status) {
                 onOrderUpdate?.(order)
+              }
+            })
+
+            // Play "customer here" sound at kitchen when an order newly gets customer_here_at set (Drive & Pick)
+            activeOrders.forEach((order: Order & { customer_here_at?: string | null }) => {
+              if (!order.customer_here_at) return
+              const prev = previousOrdersRef.current.find((o: Order & { customer_here_at?: string | null }) => o.id === order.id)
+              const newlyHere = !prev?.customer_here_at
+              if (newlyHere && !customerHerePlayedRef.current.has(order.id)) {
+                customerHerePlayedRef.current.add(order.id)
+                playCustomerHereSound()
               }
             })
           }

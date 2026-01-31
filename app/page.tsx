@@ -36,7 +36,8 @@ import {
   ChevronRight,
   Copy,
   ZoomIn,
-  Truck
+  Truck,
+  Settings
 } from "lucide-react";
 import { MessagesView } from "../components/messages-view";
 import { OrderStatusDialog } from "../components/order-status-dialog";
@@ -45,6 +46,7 @@ import { DeliveredOrdersCalendarView as CompletedOrdersCalendarView } from "../c
 import { DeliveredOrdersView } from "../components/delivered-orders-view";
 import { OrdersChart } from "../components/orders-chart";
 import { ProductsManagement } from "../components/products-management";
+import { AppConfigManagement } from "../components/app-config-management";
 import { useNotifications } from "../hooks/use-notifications";
 import { useRealTimeOrders } from "../hooks/use-real-time-orders";
 import { NotificationCenter } from "../components/notification-center";
@@ -85,6 +87,8 @@ interface Order {
   rider_assigned_at?: string | null;
   delivered_at?: string | null;
   delivery_comment?: string | null;
+  pickup_type?: string | null;
+  customer_here_at?: string | null;
 }
 
 export default function KitchenDashboard() {
@@ -1158,6 +1162,30 @@ ${receiverAddressSection}`;
     return trimmedSize.charAt(0).toUpperCase() + trimmedSize.slice(1);
   };
   
+  // Parse coffee/drink order item: "Black Coffee (With Sugar (2 tsp))" or "Milk Coffee (No Sugar)"
+  const parseCoffeeItem = (item: any): { isCoffee: boolean; type: string; sugarDisplay: string } => {
+    const name = (item?.name || '').trim()
+    const size = (item?.size || '').trim()
+    const match = name.match(/^(.+?)\s*\((?:With Sugar \((\d+)\s*tsp\)|No Sugar)\)$/)
+    if (match) {
+      const type = match[1].trim()
+      const sugarDisplay = match[2] ? `Sugar: ${match[2]} tsp` : 'Sugar: No'
+      return { isCoffee: true, type, sugarDisplay }
+    }
+    if (size) {
+      const tspMatch = size.match(/With Sugar \((\d+)\s*tsp\)/)
+      if (tspMatch) {
+        const type = name ? name.replace(/\s*\(With Sugar.*$/, '').trim() || 'Coffee' : 'Coffee'
+        return { isCoffee: true, type, sugarDisplay: `Sugar: ${tspMatch[1]} tsp` }
+      }
+      if (size === 'No Sugar') {
+        const type = name ? name.replace(/\s*\(No Sugar\).*$/, '').trim() || 'Coffee' : 'Coffee'
+        return { isCoffee: true, type, sugarDisplay: 'Sugar: No' }
+      }
+    }
+    return { isCoffee: false, type: '', sugarDisplay: '' }
+  }
+
   // Format the product name for display with emoji
   const getSizeDisplayName = (productName: string) => {
     const lower = productName.toLowerCase();
@@ -1392,6 +1420,10 @@ ${receiverAddressSection}`;
               <Clock className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Order History</span>
           </TabsTrigger>
+            <TabsTrigger value="config" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
+              <Settings className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Config</span>
+          </TabsTrigger>
         </TabsList>
         </div>
 
@@ -1559,6 +1591,20 @@ ${receiverAddressSection}`;
                                     </>
                                   );
                                 })()}
+                                {/* Drive & Pick: Pickup type + CUSTOMER HERE */}
+                                {(order.pickup_type || order.customer_here_at) && (
+                                  <div className="flex flex-wrap justify-end gap-2 mt-1">
+                                    {order.pickup_type === 'bring_to_street' && (
+                                      <Badge variant="outline" className="border-amber-500 text-amber-700">Bring to Street</Badge>
+                                    )}
+                                    {order.pickup_type === 'i_will_pick' && (
+                                      <Badge variant="outline" className="border-amber-500 text-amber-700">I Will Pick</Badge>
+                                    )}
+                                    {order.customer_here_at && (
+                                      <Badge className="bg-orange-600 text-white font-semibold">CUSTOMER HERE</Badge>
+                                    )}
+                                  </div>
+                                )}
                                 {/* Chat with Customer Button - Always Show */}
                                 {token && (
                                   <button
@@ -1695,8 +1741,9 @@ ${receiverAddressSection}`;
                                   price: 0
                                 }];
                               } else {
-                                // Ensure each item has all required fields, fallback to order-level if missing
+                                // Ensure each item has all required fields, fallback to order-level if missing (preserve name for coffee)
                                 items = items.map((item: any) => ({
+                                  name: item.name || '',
                                   size: item.size || order.size || '',
                                   quantity: item.quantity || order.quantity || 1,
                                   ingredients: (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0) 
@@ -1786,6 +1833,7 @@ ${receiverAddressSection}`;
                                         
                                         // Format the product name for display with emoji
                                         const displaySize = getSizeDisplayName(productName);
+                                        const coffeeParsed = parseCoffeeItem(item);
                                         
                                         // Clean spice - remove any "Drinks:" contamination
                                         let itemSpice = (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
@@ -1830,7 +1878,14 @@ ${receiverAddressSection}`;
                                           <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
                                             <td className="p-3 text-xs sm:text-sm font-semibold text-gray-600">{idx + 1}</td>
                                             <td className="p-3 text-xs sm:text-sm font-semibold text-gray-800">
-                                              {displaySize}
+                                              {coffeeParsed.isCoffee ? (
+                                                <span>
+                                                  <span className="block">{coffeeParsed.type}</span>
+                                                  <span className="block text-amber-700 text-xs font-medium mt-0.5">{coffeeParsed.sugarDisplay}</span>
+                                                </span>
+                                              ) : (
+                                                displaySize
+                                              )}
                                             </td>
                                             <td className="p-3 text-xs sm:text-sm text-gray-700">×{item.quantity || order.quantity || 1}</td>
                                             <td className="p-3 text-xs sm:text-sm">
@@ -2169,6 +2224,11 @@ ${receiverAddressSection}`;
           <ProductsManagement token={token} />
         </TabsContent>
 
+        {/* App Config Tab */}
+        <TabsContent value="config">
+          <AppConfigManagement />
+        </TabsContent>
+
         {/* Completed Orders Tab */}
         <TabsContent value="completed">
           <CompletedOrdersCalendarView token={token} />
@@ -2199,6 +2259,7 @@ ${receiverAddressSection}`;
           getBreadChoice={getBreadChoice}
           getSizeDisplayName={getSizeDisplayName}
           getSpiceLevel={getSpiceLevel}
+          parseCoffeeItem={parseCoffeeItem}
           onOpenChat={(waId, customerName) => {
             setChatWidgetState({ open: true, waId, customerName });
           }}
