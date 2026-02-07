@@ -441,55 +441,76 @@ export function OrderDetailModal({
 
   if (!order) return null
 
-  // Parse items
-  let items: any[] = []
+  // Parse items from order (raw first, then split before applying order fallbacks)
+  let rawItems: any[] = []
   try {
     if (order.items) {
-      items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items
-      if (!Array.isArray(items)) {
-        items = []
-      }
+      const parsed = typeof order.items === 'string' ? JSON.parse(order.items) : order.items
+      rawItems = Array.isArray(parsed) ? parsed : []
     }
-    
-    if (items.length === 0) {
-      const orderIngredients = Array.isArray(order.ingredients) 
-        ? order.ingredients 
+    if (rawItems.length === 0) {
+      const orderIngredients = Array.isArray(order.ingredients)
+        ? order.ingredients
         : (order.ingredients ? [order.ingredients] : [])
-      items = [{
+      rawItems = [{
         size: order.size || '',
         quantity: order.quantity || 1,
         ingredients: orderIngredients,
         spice_level: order.spice_level || 'None',
         sauce: order.sauce || 'None',
-        price: 0
+        price: 0,
+        product_id: null,
+        preset_id: null
       }]
-    } else {
-      items = items.map((item: any) => ({
-        name: item.name || '',
-        size: item.size || order.size || '',
-        quantity: item.quantity || order.quantity || 1,
-        ingredients: (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0) 
-          ? item.ingredients 
-          : (Array.isArray(order.ingredients) && order.ingredients.length > 0 
-              ? order.ingredients 
-              : []),
-        spice_level: (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
-          ? item.spice_level
-          : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== ''
-              ? order.spice_level
-              : 'None'),
-        sauce: (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '')
-          ? item.sauce
-          : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== ''
-              ? order.sauce
-              : 'None'),
-        price: item.price || 0
-      }))
     }
   } catch (error) {
     console.error('Error parsing items:', error)
-    items = []
+    rawItems = []
   }
+
+  // Classify using RAW item only (before order fallbacks). Add-on = no product/preset id, or type 'addon'.
+  const isAddonItem = (item: any) => {
+    if (item.type === 'addon') return true
+    const noIds = (item.product_id == null && item.preset_id == null)
+    const hasName = item.name != null && String(item.name).trim() !== ''
+    const noMainShape = !(item.size && String(item.size).trim()) && (!item.ingredients || !Array.isArray(item.ingredients) || item.ingredients.length === 0)
+    return hasName && (noIds || noMainShape)
+  }
+  const rawMain = rawItems.filter((item: any) => !isAddonItem(item))
+  const rawAddons = rawItems.filter((item: any) => isAddonItem(item))
+
+  // Apply order-level fallbacks only to main items (so add-ons never inherit main item's size/ingredients)
+  const mainItems = rawMain.map((item: any) => ({
+    name: item.name || '',
+    size: item.size || order.size || '',
+    quantity: item.quantity || order.quantity || 1,
+    ingredients: (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0)
+      ? item.ingredients
+      : (Array.isArray(order.ingredients) && order.ingredients.length > 0 ? order.ingredients : []),
+    spice_level: (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
+      ? item.spice_level
+      : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== '' ? order.spice_level : 'None'),
+    sauce: (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '')
+      ? item.sauce
+      : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== '' ? order.sauce : 'None'),
+    price: item.price || 0
+  }))
+
+  // Add-ons: use only name, quantity, price. Group by name to avoid duplicate chips (e.g. "Chips ×2" not "Chips, Chips").
+  const addonByName = new Map<string, { name: string; quantity: number; price: number }>()
+  for (const item of rawAddons) {
+    const name = (item.name || 'Add-on').trim() || 'Add-on'
+    const qty = typeof item.quantity === 'number' ? item.quantity : parseInt(String(item.quantity), 10) || 1
+    const price = typeof item.price === 'number' ? item.price : parseFloat(String(item.price)) || 0
+    const existing = addonByName.get(name)
+    if (existing) {
+      existing.quantity += qty
+      existing.price += price * qty
+    } else {
+      addonByName.set(name, { name, quantity: qty, price: price * qty })
+    }
+  }
+  const addonOnlyItems = Array.from(addonByName.values())
 
   // Parse drinks
   let drinks: any[] = []
@@ -568,14 +589,29 @@ export function OrderDetailModal({
             </div>
           )}
 
-          {/* Food Items - Large Format for Kitchen */}
+          {/* Food Items - Large Format for Kitchen (add-ons are shown in one line, not as separate items) */}
           <div className="bg-white rounded-lg p-6 border-2 border-gray-200">
             <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
               <Utensils className="h-6 w-6" />
               Food Items
             </h3>
+
+            {/* Single line for all add-ons (e.g. Chips, Extra cheese) */}
+            {addonOnlyItems.length > 0 && (
+              <div className="mb-6 p-4 bg-amber-50 rounded-lg border-2 border-amber-200">
+                <div className="text-sm font-semibold text-amber-800 mb-2">Add-ons</div>
+                <div className="flex flex-wrap gap-2">
+                  {addonOnlyItems.map((row: { name: string; quantity: number; price: number }) => (
+                    <span key={row.name} className="inline-flex items-center px-3 py-1 rounded-full bg-amber-200 text-amber-900 font-medium">
+                      {row.name}{row.quantity > 1 ? ` ×${row.quantity}` : ''}
+                      {row.price > 0 ? ` (${Number(row.price).toLocaleString()} RWF)` : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             
-            {items.map((item: any, idx: number) => {
+            {mainItems.map((item: any, idx: number) => {
               const itemIngredients: string[] = Array.isArray(item.ingredients) && item.ingredients.length > 0
                 ? item.ingredients
                 : (Array.isArray(order.ingredients) && order.ingredients.length > 0

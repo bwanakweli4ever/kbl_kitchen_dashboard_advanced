@@ -1729,82 +1729,80 @@ ${receiverAddressSection}`;
                                 <h4 className="font-bold text-base sm:text-lg text-gray-800">Food Items</h4>
                             </div>
                             
-                          {/* Parse and display all items */}
+                          {/* Parse and display all items: split main vs add-ons using raw item (before order fallbacks) to avoid duplicates */}
                                       {(() => {
                                         try {
-                              // Parse items from JSON if it's a string
-                              let items: any[] = [];
+                              let rawItems: any[] = [];
                               if (order.items) {
-                                items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
-                                if (!Array.isArray(items)) {
-                                  items = [];
-                                }
+                                const parsed = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+                                rawItems = Array.isArray(parsed) ? parsed : [];
                               }
-                              
-                              // Debug logging
-                              console.log('Order items:', order.items);
-                              console.log('Parsed items:', items);
-                              console.log('Order-level fields:', {
-                                size: order.size,
-                                ingredients: order.ingredients,
-                                spice_level: order.spice_level,
-                                sauce: order.sauce,
-                                quantity: order.quantity
-                              });
-                              
-                              // If no items array or empty, create a single item from order-level fields
-                              if (items.length === 0) {
-                                // Create a single item from order-level data
-                                const orderIngredients = Array.isArray(order.ingredients) 
-                                  ? order.ingredients 
-                                  : (order.ingredients ? [order.ingredients] : []);
-                                const orderSauce = order.sauce || 'None';
-                                const orderSpice = order.spice_level || 'None';
-                                
-                                // Create a single item from order data
-                                items = [{
+                              if (rawItems.length === 0) {
+                                const orderIngredients = Array.isArray(order.ingredients) ? order.ingredients : (order.ingredients ? [order.ingredients] : []);
+                                rawItems = [{
                                   size: order.size || '',
                                   quantity: order.quantity || 1,
                                   ingredients: orderIngredients,
-                                  spice_level: orderSpice,
-                                  sauce: orderSauce,
-                                  price: 0
+                                  spice_level: order.spice_level || 'None',
+                                  sauce: order.sauce || 'None',
+                                  price: 0,
+                                  product_id: null,
+                                  preset_id: null
                                 }];
-                              } else {
-                                // Ensure each item has all required fields, fallback to order-level if missing (preserve name for coffee)
-                                items = items.map((item: any) => ({
-                                  name: item.name || '',
-                                  size: item.size || order.size || '',
-                                  quantity: item.quantity || order.quantity || 1,
-                                  ingredients: (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0) 
-                                    ? item.ingredients 
-                                    : (Array.isArray(order.ingredients) && order.ingredients.length > 0 
-                                        ? order.ingredients 
-                                        : []),
-                                  spice_level: (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
-                                    ? item.spice_level
-                                    : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== ''
-                                        ? order.spice_level
-                                        : 'None'),
-                                  sauce: (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '')
-                                    ? item.sauce
-                                    : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== ''
-                                        ? order.sauce
-                                        : 'None'),
-                                  price: item.price || 0
-                                }));
                               }
-                              
-                              // If still no items after processing, show empty state
-                              if (items.length === 0) {
-                                return (
-                                  <div className="text-center p-4 text-gray-500 italic">No items found</div>
-                                );
+
+                              const isAddonItem = (it: any) => {
+                                if (it.type === 'addon') return true;
+                                const noIds = it.product_id == null && it.preset_id == null;
+                                const hasName = it.name != null && String(it.name).trim() !== '';
+                                const noMainShape = !(it.size && String(it.size).trim()) && (!it.ingredients || !Array.isArray(it.ingredients) || it.ingredients.length === 0);
+                                return hasName && (noIds || noMainShape);
+                              };
+                              const rawMain = rawItems.filter((it: any) => !isAddonItem(it));
+                              const rawAddons = rawItems.filter((it: any) => isAddonItem(it));
+
+                              const mainItems = rawMain.map((item: any) => ({
+                                name: item.name || '',
+                                size: item.size || order.size || '',
+                                quantity: item.quantity || order.quantity || 1,
+                                ingredients: (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0) ? item.ingredients : (Array.isArray(order.ingredients) && order.ingredients.length > 0 ? order.ingredients : []),
+                                spice_level: (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '') ? item.spice_level : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== '' ? order.spice_level : 'None'),
+                                sauce: (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '') ? item.sauce : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== '' ? order.sauce : 'None'),
+                                price: item.price || 0
+                              }));
+
+                              const addonByName = new Map<string, { name: string; quantity: number; price: number }>();
+                              for (const it of rawAddons) {
+                                const name = (it.name || 'Add-on').trim() || 'Add-on';
+                                const qty = typeof it.quantity === 'number' ? it.quantity : parseInt(String(it.quantity), 10) || 1;
+                                const price = typeof it.price === 'number' ? it.price : parseFloat(String(it.price)) || 0;
+                                const existing = addonByName.get(name);
+                                if (existing) {
+                                  existing.quantity += qty;
+                                  existing.price += price * qty;
+                                } else {
+                                  addonByName.set(name, { name, quantity: qty, price: price * qty });
+                                }
                               }
-                              
-                              // Display all items in table format
-                                                    return (
-                                <div className="overflow-x-auto">
+                              const addonOnlyItems = Array.from(addonByName.values());
+
+                              if (mainItems.length === 0 && addonOnlyItems.length === 0) {
+                                return <div className="text-center p-4 text-gray-500 italic">No items found</div>;
+                              }
+
+                              return (
+                                <div className="overflow-x-auto space-y-3">
+                                  {addonOnlyItems.length > 0 && (
+                                    <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                                      <span className="text-xs font-semibold text-amber-800">Add-ons: </span>
+                                      <span className="text-sm text-amber-900">
+                                        {addonOnlyItems.map((row: { name: string; quantity: number; price: number }) =>
+                                          `${row.name}${row.quantity > 1 ? ` ×${row.quantity}` : ''}${row.price > 0 ? ` (${Number(row.price).toLocaleString()} RWF)` : ''}`
+                                        ).join(', ')}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {mainItems.length > 0 && (
                                   <table className="w-full border-collapse">
                                     <thead>
                                       <tr className="bg-gradient-to-r from-green-50 to-blue-50 border-b-2 border-gray-300">
@@ -1817,7 +1815,7 @@ ${receiverAddressSection}`;
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {items.map((item: any, idx: number) => {
+                                      {mainItems.map((item: any, idx: number) => {
                                         // Get ingredients - ensure it's always an array
                                         const itemIngredients: string[] = Array.isArray(item.ingredients) && item.ingredients.length > 0
                                           ? item.ingredients
@@ -1942,6 +1940,7 @@ ${receiverAddressSection}`;
                                       })}
                                     </tbody>
                                   </table>
+                                  )}
                                                                       </div>
                               );
                             } catch (error) {
