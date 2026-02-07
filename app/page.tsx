@@ -37,8 +37,7 @@ import {
   Copy,
   ZoomIn,
   Truck,
-  Settings,
-  Package
+  Settings
 } from "lucide-react";
 import { MessagesView } from "../components/messages-view";
 import { OrderStatusDialog } from "../components/order-status-dialog";
