@@ -18,6 +18,8 @@ import { Settings, Save, Loader2 } from "lucide-react";
 
 interface AppConfig {
   orders_enabled: boolean;
+  website_orders_enabled?: boolean;
+  mobile_orders_enabled?: boolean;
   maintenance_message: string;
   special_announcement_enabled: boolean;
   special_announcement: string;
@@ -52,7 +54,11 @@ export function AppConfigManagement() {
       });
       if (response.ok) {
         const data = await response.json();
-        setConfig(data);
+        setConfig({
+          ...data,
+          website_orders_enabled: data.website_orders_enabled ?? data.orders_enabled ?? true,
+          mobile_orders_enabled: data.mobile_orders_enabled ?? data.orders_enabled ?? true,
+        });
       } else {
         throw new Error("Failed to load config");
       }
@@ -141,16 +147,55 @@ export function AppConfigManagement() {
             App Configuration
           </CardTitle>
           <CardDescription>
-            Manage app settings including maintenance mode, announcements, and promo settings
+            Disable website or mobile ordering and set the message users see. Use to avoid orders that would be refunded or cause frustration.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Orders Enabled */}
+          {/* Order source availability */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Order source availability</h3>
+            <p className="text-sm text-muted-foreground">
+              Control which channels can accept orders (website, mobile). When a source is off, users see the maintenance message.
+            </p>
+          </div>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="orders-enabled">Orders Enabled</Label>
+              <Label htmlFor="website-orders">Website orders enabled</Label>
               <p className="text-sm text-muted-foreground">
-                Allow customers to place orders
+                Allow orders from the website (kblbites.com). When off, users see the maintenance message and cannot order.
+              </p>
+            </div>
+            <Switch
+              id="website-orders"
+              checked={config.website_orders_enabled ?? config.orders_enabled ?? true}
+              onCheckedChange={(checked) =>
+                setConfig({ ...config, website_orders_enabled: checked })
+              }
+            />
+          </div>
+
+          {/* Mobile orders */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="mobile-orders">Mobile app orders enabled</Label>
+              <p className="text-sm text-muted-foreground">
+                Allow orders from the mobile app. When off, users see the maintenance message and cannot place orders.
+              </p>
+            </div>
+            <Switch
+              id="mobile-orders"
+              checked={config.mobile_orders_enabled ?? config.orders_enabled ?? true}
+              onCheckedChange={(checked) =>
+                setConfig({ ...config, mobile_orders_enabled: checked })
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between border-t pt-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="orders-enabled">Master: all orders enabled</Label>
+              <p className="text-sm text-muted-foreground">
+                When off, both website and mobile are disabled (overrides the two toggles above).
               </p>
             </div>
             <Switch
@@ -162,7 +207,13 @@ export function AppConfigManagement() {
             />
           </div>
 
-          {/* Maintenance Message */}
+          {/* Site config */}
+          <div className="space-y-4 border-t pt-6 mt-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Site config</h3>
+            <p className="text-sm text-muted-foreground">
+              Maintenance message, announcements, and promo settings shown to customers.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="maintenance-message">Maintenance Message</Label>
             <Textarea

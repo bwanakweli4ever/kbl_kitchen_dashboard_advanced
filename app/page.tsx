@@ -37,7 +37,8 @@ import {
   Copy,
   ZoomIn,
   Truck,
-  Settings
+  Settings,
+  Package
 } from "lucide-react";
 import { MessagesView } from "../components/messages-view";
 import { OrderStatusDialog } from "../components/order-status-dialog";
@@ -47,6 +48,7 @@ import { DeliveredOrdersView } from "../components/delivered-orders-view";
 import { OrdersChart } from "../components/orders-chart";
 import { ProductsManagement } from "../components/products-management";
 import { AppConfigManagement } from "../components/app-config-management";
+import { AddonsManagement } from "../components/addons-management";
 import { useNotifications } from "../hooks/use-notifications";
 import { useRealTimeOrders } from "../hooks/use-real-time-orders";
 import { NotificationCenter } from "../components/notification-center";
@@ -89,6 +91,7 @@ interface Order {
   delivery_comment?: string | null;
   pickup_type?: string | null;
   customer_here_at?: string | null;
+  scheduled_delivery_at?: string | null;
 }
 
 export default function KitchenDashboard() {
@@ -1420,6 +1423,10 @@ ${receiverAddressSection}`;
               <Clock className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Order History</span>
           </TabsTrigger>
+            <TabsTrigger value="addons" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
+              <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Addons</span>
+          </TabsTrigger>
             <TabsTrigger value="config" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Settings className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Config</span>
@@ -1632,6 +1639,11 @@ ${receiverAddressSection}`;
                           <div className="text-base sm:text-lg text-gray-600 font-medium">
                             {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString()}
                           </div>
+                          {order.scheduled_delivery_at && (
+                            <div className="mt-1 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 inline-flex items-center gap-1">
+                              📅 Scheduled: {new Date(order.scheduled_delivery_at).toLocaleDateString()} at {new Date(order.scheduled_delivery_at).toLocaleTimeString()}
+                            </div>
+                          )}
                         </div>
                         
                         {/* Customer Info */}
@@ -2224,7 +2236,12 @@ ${receiverAddressSection}`;
           <ProductsManagement token={token} />
         </TabsContent>
 
-        {/* App Config Tab */}
+        {/* Addons Tab */}
+        <TabsContent value="addons">
+          <AddonsManagement token={token} />
+        </TabsContent>
+
+        {/* App Config Tab (source availability + site config) */}
         <TabsContent value="config">
           <AppConfigManagement />
         </TabsContent>

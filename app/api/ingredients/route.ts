@@ -11,11 +11,13 @@ export async function GET(request: NextRequest) {
     const token = authorization.replace("Bearer ", "")
     const { searchParams } = new URL(request.url)
     const availableOnly = searchParams.get("available_only") === "true"
+    const addonsOnly = searchParams.get("addons_only") === "true"
     const category = searchParams.get("category")
 
     let apiUrl = `${config.api.baseUrl}/api/ingredients?`
     if (availableOnly) apiUrl += "available_only=true&"
-    if (category) apiUrl += `category=${category}&`
+    if (addonsOnly) apiUrl += "addons_only=true&"
+    if (category) apiUrl += `category=${encodeURIComponent(category)}&`
 
     const response = await fetch(apiUrl, {
       headers: {

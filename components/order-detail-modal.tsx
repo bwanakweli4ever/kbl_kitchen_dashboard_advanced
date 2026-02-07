@@ -24,7 +24,8 @@ import {
   Flame,
   MessageSquare,
   Truck,
-  Package
+  Package,
+  Calendar
 } from "lucide-react"
 import { config } from "@/lib/config"
 import { ChatWidget } from "./chat-widget"
@@ -156,6 +157,7 @@ interface Order {
   delivery_comment?: string | null
   pickup_type?: string | null
   customer_here_at?: string | null
+  scheduled_delivery_at?: string | null
 }
 
 interface OrderDetailModalProps {
@@ -549,6 +551,20 @@ export function OrderDetailModal({
               {order.customer_here_at && (
                 <Badge className="bg-orange-600 text-lg px-4 py-1">CUSTOMER HERE</Badge>
               )}
+            </div>
+          )}
+
+          {/* Scheduled delivery (when order is scheduled) */}
+          {order.scheduled_delivery_at && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg p-4 border-2 border-amber-300 shadow-md">
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar className="h-5 w-5 text-amber-600" />
+                <h4 className="font-bold text-amber-900 text-base sm:text-lg">📅 Scheduled delivery</h4>
+              </div>
+              <p className="text-amber-800 font-medium">
+                {new Date(order.scheduled_delivery_at).toLocaleDateString(undefined, { dateStyle: "medium" })} at {new Date(order.scheduled_delivery_at).toLocaleTimeString(undefined, { timeStyle: "short" })}
+              </p>
+              <p className="text-amber-700 text-sm mt-1">Customer requested this preferred delivery time.</p>
             </div>
           )}
 
