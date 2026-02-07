@@ -21,8 +21,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Package, Loader2, Save } from "lucide-react";
+import { Plus, Package, Loader2 } from "lucide-react";
 
 interface Ingredient {
   id: number;
@@ -39,11 +47,24 @@ interface AddonsManagementProps {
   token: string | null;
 }
 
+const defaultCreateForm = {
+  name: "",
+  display_name: "",
+  price: 0,
+  available: true,
+  available_as_addon: true,
+  category: "",
+  image_url: "",
+};
+
 export function AddonsManagement({ token }: AddonsManagementProps) {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [showAddonsOnly, setShowAddonsOnly] = useState(true);
+  const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [createForm, setCreateForm] = useState(defaultCreateForm);
+  const [creating, setCreating] = useState(false);
   const { toast } = useToast();
 
   const loadIngredients = async () => {
@@ -133,6 +154,61 @@ export function AddonsManagement({ token }: AddonsManagementProps) {
     updateIngredient(ing.id, { price: num });
   };
 
+  const createIngredient = async () => {
+    if (!token) return;
+    const name = (createForm.name || "").trim();
+    const display_name = (createForm.display_name || "").trim();
+    if (!name || !display_name) {
+      toast({
+        title: "Validation",
+        description: "Name and display name are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await fetch("/api/ingredients", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name,
+          display_name,
+          price: Number(createForm.price) || 0,
+          available: createForm.available,
+          available_as_addon: createForm.available_as_addon,
+          category: createForm.category || undefined,
+          image_url: createForm.image_url || undefined,
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setIngredients((prev) => [...prev, created]);
+        setOpenCreateDialog(false);
+        setCreateForm(defaultCreateForm);
+        toast({ title: "Created", description: "Addon created successfully." });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({
+          title: "Error",
+          description: err.detail || err.error || "Failed to create addon",
+          variant: "destructive",
+        });
+      }
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: "Failed to create addon",
+        variant: "destructive",
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
   if (!token) {
     return (
       <Card>
@@ -167,6 +243,16 @@ export function AddonsManagement({ token }: AddonsManagementProps) {
             </div>
             <Button variant="outline" size="sm" onClick={loadIngredients}>
               Refresh
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setCreateForm(defaultCreateForm);
+                setOpenCreateDialog(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create new addon
             </Button>
           </div>
 
@@ -247,6 +333,93 @@ export function AddonsManagement({ token }: AddonsManagementProps) {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={openCreateDialog} onOpenChange={setOpenCreateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create new addon</DialogTitle>
+            <DialogDescription>
+              Add a new ingredient that can be offered as an add-on. Name is used internally; display name is shown to customers.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="new-name">Name (internal)</Label>
+              <Input
+                id="new-name"
+                placeholder="e.g. extra_cheese"
+                value={createForm.name}
+                onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-display-name">Display name</Label>
+              <Input
+                id="new-display-name"
+                placeholder="e.g. Extra cheese"
+                value={createForm.display_name}
+                onChange={(e) => setCreateForm((f) => ({ ...f, display_name: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-price">Price (RWF)</Label>
+              <Input
+                id="new-price"
+                type="number"
+                min={0}
+                step={100}
+                value={createForm.price}
+                placeholder="0"
+                onChange={(e) =>
+                  setCreateForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-category">Category (optional)</Label>
+              <Input
+                id="new-category"
+                placeholder="e.g. toppings"
+                value={createForm.category}
+                onChange={(e) => setCreateForm((f) => ({ ...f, category: e.target.value }))}
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="new-available"
+                  checked={createForm.available}
+                  onCheckedChange={(c) => setCreateForm((f) => ({ ...f, available: c }))}
+                />
+                <Label htmlFor="new-available">Available</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="new-addon"
+                  checked={createForm.available_as_addon}
+                  onCheckedChange={(c) => setCreateForm((f) => ({ ...f, available_as_addon: c }))}
+                />
+                <Label htmlFor="new-addon">Offer as add-on</Label>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenCreateDialog(false)} disabled={creating}>
+              Cancel
+            </Button>
+            <Button onClick={createIngredient} disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                "Create addon"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

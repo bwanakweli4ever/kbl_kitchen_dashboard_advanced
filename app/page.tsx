@@ -1225,63 +1225,82 @@ ${receiverAddressSection}`;
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 flex items-center justify-center p-2 sm:p-4">
-        <Card className="w-full max-w-sm sm:max-w-md transform transition-all duration-500 hover:scale-105 hover:shadow-2xl">
-          <CardHeader className="text-center pb-4">
-            <div className="flex flex-col items-center gap-3 mb-4">
-              {/* KBL Bites Logo */}
-              <div className="flex items-center gap-2">
-                <img 
-                  src="/logo.png" 
-                  alt="KBL Bites Logo" 
-                  className="w-12 h-12 sm:w-14 sm:h-14 object-contain animate-bounce"
+      <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-emerald-50 via-white to-amber-50">
+        {/* Subtle background orbs */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-emerald-200/30 blur-3xl" />
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-amber-200/30 blur-3xl" />
+        </div>
+
+        <Card className="relative w-full max-w-md border-0 shadow-xl shadow-emerald-900/10 rounded-2xl overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none" />
+          <CardHeader className="text-center pb-2 pt-8 sm:pt-10">
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center justify-center gap-3">
+                <img
+                  src="/logo.png"
+                  alt="KBL Bites"
+                  className="w-14 h-14 sm:w-16 sm:h-16 object-contain drop-shadow-sm"
                 />
-                <div className="flex flex-col">
-                  <CardTitle className="text-xl sm:text-2xl font-bold text-green-600 leading-tight">
-                    <span className="text-green-600">KBL</span> <span className="text-green-600">Bites</span>
-                    <span className="text-orange-500 text-2xl sm:text-3xl ml-1">•</span>
+                <div className="flex flex-col items-start">
+                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-emerald-700">
+                    KBL Bites
                   </CardTitle>
-                  <p className="text-gray-500 text-xs sm:text-sm font-medium uppercase tracking-wider">QUICK • FRESH • SATISFYING</p>
+                  <p className="text-amber-600 text-xs sm:text-sm font-medium uppercase tracking-widest">
+                    Kitchen
+                  </p>
                 </div>
               </div>
+              <p className="text-gray-500 text-sm max-w-xs">
+                Sign in with your API key to manage orders
+              </p>
             </div>
-            <p className="text-gray-600 text-sm sm:text-base">
-              Enter your API key to access orders
-            </p>
           </CardHeader>
-          <CardContent className="space-y-3 sm:space-y-4">
-            <Input
-              type="password"
-              placeholder="API Key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-              className="h-10 sm:h-11 text-sm sm:text-base"
-            />
+          <CardContent className="space-y-4 pb-8 sm:pb-10 px-6 sm:px-8">
+            <div className="space-y-2">
+              <label htmlFor="api-key" className="text-sm font-medium text-gray-700">
+                API Key
+              </label>
+              <Input
+                id="api-key"
+                type="password"
+                placeholder="Enter your API key"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                className="h-11 text-base border-gray-200 focus:border-emerald-500 focus:ring-emerald-500/20 rounded-xl"
+                disabled={loading}
+                autoComplete="current-password"
+              />
+            </div>
             <Button
               onClick={handleLogin}
-              disabled={loading || !apiKey}
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white h-10 sm:h-11 text-sm sm:text-base touch-manipulation shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50"
+              disabled={loading || !apiKey.trim()}
+              className="w-full h-12 text-base font-semibold bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/30 transition-all duration-200 disabled:opacity-60 disabled:pointer-events-none"
             >
               {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  <span>Connecting to Kitchen...</span>
-                </div>
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  Signing in…
+                </span>
               ) : (
-                <div className="flex items-center gap-2">
-                  <span>🍳</span>
-                  <span>Connect to Kitchen</span>
-                  <span>→</span>
-                </div>
+                <span className="flex items-center gap-2">
+                  Sign in
+                  <span className="opacity-80">→</span>
+                </span>
               )}
             </Button>
+            {loading && (
+              <p className="text-center text-xs text-gray-400">Verifying with server…</p>
+            )}
             {error && (
-              <p className="text-red-500 text-xs sm:text-sm text-center px-2">{error}</p>
+              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+                <p className="text-red-700 text-sm text-center">{error}</p>
+              </div>
             )}
             {successMessage && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-                <p className="text-green-600 text-sm font-medium animate-pulse">{successMessage}</p>
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+                <p className="text-emerald-700 text-sm font-medium text-center">{successMessage}</p>
               </div>
             )}
           </CardContent>

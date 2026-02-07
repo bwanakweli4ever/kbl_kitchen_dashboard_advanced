@@ -76,6 +76,8 @@ interface Ingredient {
   image_url?: string
   category?: string
   available: boolean
+  price?: number
+  available_as_addon?: boolean
 }
 
 interface Sauce {
@@ -145,6 +147,8 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
     image_url: "",
     category: "vegetables",
     available: true,
+    price: 0,
+    available_as_addon: false,
   })
 
   const [presetForm, setPresetForm] = useState({
@@ -468,6 +472,8 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
       image_url: "",
       category: "vegetables",
       available: true,
+      price: 0,
+      available_as_addon: false,
     })
   }
 
@@ -516,6 +522,8 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
       image_url: ingredient.image_url || "",
       category: ingredient.category || "vegetables",
       available: ingredient.available,
+      price: ingredient.price ?? 0,
+      available_as_addon: ingredient.available_as_addon ?? false,
     })
     setIngredientDialogOpen(true)
   }
@@ -591,6 +599,32 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
       toast({
         title: "Error",
         description: "Failed to update ingredient",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const toggleSauceAvailability = async (sauce: Sauce) => {
+    try {
+      const response = await fetch(`/api/sauces/${sauce.id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ available: !sauce.available }),
+      })
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: `Sauce ${sauce.available ? "disabled" : "enabled"} successfully`,
+        })
+        fetchSauces()
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update sauce",
         variant: "destructive",
       })
     }
@@ -878,13 +912,34 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                         />
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="ing_available"
-                        checked={ingredientForm.available}
-                        onCheckedChange={(checked) => setIngredientForm({ ...ingredientForm, available: checked })}
+                    <div>
+                      <Label htmlFor="ing_price">Price (RWF) – for add-ons</Label>
+                      <Input
+                        id="ing_price"
+                        type="number"
+                        min={0}
+                        value={ingredientForm.price}
+                        onChange={(e) => setIngredientForm({ ...ingredientForm, price: parseFloat(e.target.value) || 0 })}
+                        placeholder="0"
                       />
-                      <Label htmlFor="ing_available">Available</Label>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="ing_available"
+                          checked={ingredientForm.available}
+                          onCheckedChange={(checked) => setIngredientForm({ ...ingredientForm, available: checked })}
+                        />
+                        <Label htmlFor="ing_available">Available</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="ing_available_as_addon"
+                          checked={ingredientForm.available_as_addon}
+                          onCheckedChange={(checked) => setIngredientForm({ ...ingredientForm, available_as_addon: checked })}
+                        />
+                        <Label htmlFor="ing_available_as_addon">Available as add-on</Label>
+                      </div>
                     </div>
                   </div>
                   <DialogFooter>
@@ -905,6 +960,8 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                     <TableHead>Image</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Category</TableHead>
+                    <TableHead>Price (RWF)</TableHead>
+                    <TableHead>Add-on</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -919,10 +976,9 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                             alt={ingredient.display_name}
                             className="w-12 h-12 object-cover rounded-md border border-gray-200"
                             onError={(e) => {
-                              // Fallback if image fails to load
                               const target = e.currentTarget
                               target.src = '/images/placeholder.png'
-                              target.onerror = null // Prevent infinite loop
+                              target.onerror = null
                             }}
                             onLoad={() => {
                               console.log(`✅ Loaded ingredient image: ${getImageUrl(ingredient.image_url)}`)
@@ -936,6 +992,12 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                       </TableCell>
                       <TableCell className="font-medium">{ingredient.display_name}</TableCell>
                       <TableCell>{ingredient.category || "N/A"}</TableCell>
+                      <TableCell>{(ingredient.price ?? 0) > 0 ? (ingredient.price ?? 0).toLocaleString() : "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={ingredient.available_as_addon ? "default" : "outline"}>
+                          {ingredient.available_as_addon ? "Add-on" : "—"}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={ingredient.available ? "default" : "secondary"}>
                           {ingredient.available ? "Available" : "Unavailable"}
@@ -967,7 +1029,8 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
         <TabsContent value="sauces" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Sauces</CardTitle>
+              <CardTitle>Sauces ({sauces.length})</CardTitle>
+              <p className="text-sm text-muted-foreground">List from API. Toggle to make unavailable.</p>
             </CardHeader>
             <CardContent>
               <Table>
@@ -975,6 +1038,7 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -985,6 +1049,15 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                         <Badge variant={sauce.available ? "default" : "secondary"}>
                           {sauce.available ? "Available" : "Unavailable"}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={sauce.available}
+                            onCheckedChange={() => toggleSauceAvailability(sauce)}
+                          />
+                          <span className="text-xs text-muted-foreground">Make unavailable</span>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -154,8 +154,8 @@ export function DeliveredOrdersCalendarView({ token }: CompletedOrdersCalendarVi
   const filteredAndSortedOrders = useMemo(() => {
     const filtered = orders.filter((order) => {
       const matchesSearch =
-        order.profile_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.wa_id.includes(searchTerm) ||
+        (order.profile_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (order.wa_id || "").includes(searchTerm) ||
         order.id.toString().includes(searchTerm)
 
       const orderDate = new Date(order.updated_at)
@@ -171,8 +171,8 @@ export function DeliveredOrdersCalendarView({ token }: CompletedOrdersCalendarVi
 
       switch (sortBy) {
         case "customer_name":
-          aValue = a.profile_name.toLowerCase()
-          bValue = b.profile_name.toLowerCase()
+          aValue = (a.profile_name || "").toLowerCase()
+          bValue = (b.profile_name || "").toLowerCase()
           break
         case "food_total":
           aValue = a.food_total

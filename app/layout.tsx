@@ -1,6 +1,14 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import ErrorBoundary from '../components/error-boundary'
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#16a34a',
+}
 
 export const metadata: Metadata = {
   title: 'KBL Bites Kitchen Dashboard',
@@ -21,8 +29,6 @@ export const metadata: Metadata = {
       { url: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' }
     ]
   },
-  themeColor: '#16a34a',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
