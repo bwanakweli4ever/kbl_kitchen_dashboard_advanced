@@ -493,10 +493,12 @@ export function OrderDetailModal({
     sauce: (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '')
       ? item.sauce
       : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== '' ? order.sauce : 'None'),
-    price: item.price || 0
+    price: item.price || 0,
+    product_display_name: item.product_display_name ?? null,
+    product_label: item.product_label ?? null,
   }))
 
-  // Add-ons: use only name, quantity, price. Group by name to avoid duplicate chips (e.g. "Chips ×2" not "Chips, Chips").
+  // Add-ons: from standalone addon items (rawAddons) and from item.addons (website/WhatsApp parsed addons)
   const addonByName = new Map<string, { name: string; quantity: number; price: number }>()
   for (const item of rawAddons) {
     const name = (item.name || 'Add-on').trim() || 'Add-on'
@@ -508,6 +510,20 @@ export function OrderDetailModal({
       existing.price += price * qty
     } else {
       addonByName.set(name, { name, quantity: qty, price: price * qty })
+    }
+  }
+  for (const item of rawMain) {
+    const addons = item.addons && Array.isArray(item.addons) ? item.addons : []
+    for (const a of addons) {
+      const name = (a.name || 'Add-on').trim() || 'Add-on'
+      const price = typeof a.price === 'number' ? a.price : parseFloat(String(a.price)) || 0
+      const existing = addonByName.get(name)
+      if (existing) {
+        existing.quantity += 1
+        existing.price += price
+      } else {
+        addonByName.set(name, { name, quantity: 1, price })
+      }
     }
   }
   const addonOnlyItems = Array.from(addonByName.values())
@@ -625,6 +641,10 @@ export function OrderDetailModal({
               }
               const productName = getBreadChoice(rawSize, item)
               const displaySize = getSizeDisplayName(productName)
+              // Prefer saved product_label (e.g. "Medium Sandwich", "Light Twister (Wrap)", "Ultimate Combo (Large Sandwich)")
+              const productTypeLabel = item.product_label
+                || (item.product_display_name ? `${item.name || displaySize} (${item.product_display_name})` : null)
+                || (coffeeParsed.isCoffee ? coffeeParsed.type : displaySize)
               
               let itemSpice = (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
                 ? item.spice_level
@@ -666,7 +686,7 @@ export function OrderDetailModal({
                 <div key={idx} className="mb-8 p-6 bg-gradient-to-br from-blue-50 to-green-50 rounded-xl border-2 border-blue-300">
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-3xl font-bold text-gray-800">
-                      Item #{idx + 1} - {coffeeParsed.isCoffee ? coffeeParsed.type : displaySize}
+                      Item #{idx + 1} - {productTypeLabel}
                     </div>
                     <div className="text-2xl font-bold text-green-600">
                       ×{item.quantity || order.quantity || 1}

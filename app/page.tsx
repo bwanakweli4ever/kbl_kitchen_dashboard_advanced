@@ -1768,7 +1768,8 @@ ${receiverAddressSection}`;
                                 ingredients: (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0) ? item.ingredients : (Array.isArray(order.ingredients) && order.ingredients.length > 0 ? order.ingredients : []),
                                 spice_level: (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '') ? item.spice_level : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== '' ? order.spice_level : 'None'),
                                 sauce: (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '') ? item.sauce : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== '' ? order.sauce : 'None'),
-                                price: item.price || 0
+                                price: item.price || 0,
+                                product_display_name: item.product_display_name ?? null
                               }));
 
                               const addonByName = new Map<string, { name: string; quantity: number; price: number }>();
@@ -1782,6 +1783,20 @@ ${receiverAddressSection}`;
                                   existing.price += price * qty;
                                 } else {
                                   addonByName.set(name, { name, quantity: qty, price: price * qty });
+                                }
+                              }
+                              for (const it of rawMain) {
+                                const addons = it.addons && Array.isArray(it.addons) ? it.addons : [];
+                                for (const a of addons) {
+                                  const name = (a.name || 'Add-on').trim() || 'Add-on';
+                                  const price = typeof a.price === 'number' ? a.price : parseFloat(String(a.price)) || 0;
+                                  const existing = addonByName.get(name);
+                                  if (existing) {
+                                    existing.quantity += 1;
+                                    existing.price += price;
+                                  } else {
+                                    addonByName.set(name, { name, quantity: 1, price });
+                                  }
                                 }
                               }
                               const addonOnlyItems = Array.from(addonByName.values());
@@ -1862,6 +1877,9 @@ ${receiverAddressSection}`;
                                         // Format the product name for display with emoji
                                         const displaySize = getSizeDisplayName(productName);
                                         const coffeeParsed = parseCoffeeItem(item);
+                                        // Prefer saved product_label (e.g. "Medium Sandwich", "Light Twister (Wrap)", "Ultimate Combo (Large Sandwich)")
+                                        const sizeColumnLabel = item.product_label
+                                          || (item.product_display_name ? `${item.name || displaySize} (${item.product_display_name})` : null);
                                         
                                         // Clean spice - remove any "Drinks:" contamination
                                         let itemSpice = (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '')
@@ -1906,7 +1924,9 @@ ${receiverAddressSection}`;
                                           <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
                                             <td className="p-3 text-xs sm:text-sm font-semibold text-gray-600">{idx + 1}</td>
                                             <td className="p-3 text-xs sm:text-sm font-semibold text-gray-800">
-                                              {coffeeParsed.isCoffee ? (
+                                              {sizeColumnLabel != null ? (
+                                                sizeColumnLabel
+                                              ) : coffeeParsed.isCoffee ? (
                                                 <span>
                                                   <span className="block">{coffeeParsed.type}</span>
                                                   <span className="block text-amber-700 text-xs font-medium mt-0.5">{coffeeParsed.sugarDisplay}</span>
