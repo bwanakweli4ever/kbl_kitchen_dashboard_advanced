@@ -1753,10 +1753,10 @@ ${receiverAddressSection}`;
 
                               const isAddonItem = (it: any) => {
                                 if (it.type === 'addon') return true;
-                                const noIds = it.product_id == null && it.preset_id == null;
-                                const hasName = it.name != null && String(it.name).trim() !== '';
                                 const noMainShape = !(it.size && String(it.size).trim()) && (!it.ingredients || !Array.isArray(it.ingredients) || it.ingredients.length === 0);
-                                return hasName && (noIds || noMainShape);
+                                const hasName = it.name != null && String(it.name).trim() !== '';
+                                const noIds = it.product_id == null && it.preset_id == null;
+                                return hasName && noIds && noMainShape;
                               };
                               const rawMain = rawItems.filter((it: any) => !isAddonItem(it));
                               const rawAddons = rawItems.filter((it: any) => isAddonItem(it));
@@ -1769,7 +1769,8 @@ ${receiverAddressSection}`;
                                 spice_level: (item.spice_level && item.spice_level !== 'None' && item.spice_level !== 'none' && item.spice_level !== '') ? item.spice_level : (order.spice_level && order.spice_level !== 'None' && order.spice_level !== 'none' && order.spice_level !== '' ? order.spice_level : 'None'),
                                 sauce: (item.sauce && item.sauce !== 'None' && item.sauce !== 'none' && item.sauce !== '') ? item.sauce : (order.sauce && order.sauce !== 'None' && order.sauce !== 'none' && order.sauce !== '' ? order.sauce : 'None'),
                                 price: item.price || 0,
-                                product_display_name: item.product_display_name ?? null
+                                product_display_name: item.product_display_name ?? null,
+                                product_label: item.product_label ?? null,
                               }));
 
                               const addonByName = new Map<string, { name: string; quantity: number; price: number }>();

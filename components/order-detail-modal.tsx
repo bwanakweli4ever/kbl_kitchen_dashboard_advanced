@@ -468,13 +468,14 @@ export function OrderDetailModal({
     rawItems = []
   }
 
-  // Classify using RAW item only (before order fallbacks). Add-on = no product/preset id, or type 'addon'.
+  // Classify using RAW item only. Add-on = type 'addon' OR standalone addon (has name but no size and no ingredients).
+  // WhatsApp/website items have no product_id/preset_id but have size+ingredients → main item, not addon.
   const isAddonItem = (item: any) => {
     if (item.type === 'addon') return true
-    const noIds = (item.product_id == null && item.preset_id == null)
-    const hasName = item.name != null && String(item.name).trim() !== ''
     const noMainShape = !(item.size && String(item.size).trim()) && (!item.ingredients || !Array.isArray(item.ingredients) || item.ingredients.length === 0)
-    return hasName && (noIds || noMainShape)
+    const hasName = item.name != null && String(item.name).trim() !== ''
+    const noIds = item.product_id == null && item.preset_id == null
+    return hasName && noIds && noMainShape
   }
   const rawMain = rawItems.filter((item: any) => !isAddonItem(item))
   const rawAddons = rawItems.filter((item: any) => isAddonItem(item))
