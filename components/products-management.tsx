@@ -1150,20 +1150,19 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                         </Select>
                       </div>
                     </div>
-                    <div>
-                      <Label>Price (RWF)</Label>
-                      <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+                    <div id="preset-price-row" className="rounded-md border border-input bg-muted/50 p-3">
+                      <Label htmlFor="preset_price_display" className="text-sm font-medium">Price (RWF)</Label>
+                      <div id="preset_price_display" className="mt-1.5 flex h-10 items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium">
                         {(() => {
-                          const fromPreset = editingPreset?.product_base_price
-                          const product = presetForm.product_id > 0 ? products.find((p) => p.id === presetForm.product_id) : null
-                          const fromProduct = product?.base_price
-                          const price = fromPreset ?? fromProduct ?? 0
-                          const source = fromPreset != null ? "loaded from menu" : fromProduct != null ? "from selected product" : null
-                          return price > 0 ? (
-                            <span>{price.toLocaleString()} RWF{source ? ` (${source})` : ""}</span>
-                          ) : (
-                            <span className="text-muted-foreground">Select a product — price loads from menu</span>
-                          )
+                          const linkedProduct = presetForm.product_id > 0 ? products.find((p) => p.id === presetForm.product_id) : null
+                          const fromProduct = linkedProduct?.base_price
+                          const raw = editingPreset as { product_base_price?: number; productBasePrice?: number } | null
+                          const fromApi = raw != null ? Number(raw.product_base_price ?? raw.productBasePrice) : undefined
+                          const price = fromProduct ?? (fromApi != null && !Number.isNaN(fromApi) ? fromApi : 0)
+                          if (price > 0) {
+                            return <span>{Number(price).toLocaleString()} RWF (from product)</span>
+                          }
+                          return <span className="text-muted-foreground">Select a product — price comes from product</span>
                         })()}
                       </div>
                     </div>
@@ -1331,7 +1330,9 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                 </TableHeader>
                 <TableBody>
                   {presets.map((preset) => {
-                    const price = preset.product_base_price ?? products.find((p) => p.id === preset.product_id)?.base_price ?? 0
+                    const linkedProduct = products.find((p) => p.id === preset.product_id)
+                    const priceFromApi = preset.product_base_price != null ? Number(preset.product_base_price) : undefined
+                    const price = linkedProduct?.base_price ?? priceFromApi ?? 0
                     return (
                     <TableRow key={preset.id}>
                       <TableCell>
