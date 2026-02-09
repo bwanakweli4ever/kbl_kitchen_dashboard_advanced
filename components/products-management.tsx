@@ -1129,14 +1129,6 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                             ))}
                           </SelectContent>
                         </Select>
-                        {presetForm.product_id > 0 && (() => {
-                          const product = products.find((p) => p.id === presetForm.product_id)
-                          return product ? (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              Price: {product.base_price.toLocaleString()} RWF (from product)
-                            </p>
-                          ) : null
-                        })()}
                       </div>
                       <div>
                         <Label htmlFor="preset_sauce">Sauce</Label>
@@ -1156,6 +1148,23 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                             ))}
                           </SelectContent>
                         </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Price (RWF)</Label>
+                      <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+                        {(() => {
+                          const fromPreset = editingPreset?.product_base_price
+                          const product = presetForm.product_id > 0 ? products.find((p) => p.id === presetForm.product_id) : null
+                          const fromProduct = product?.base_price
+                          const price = fromPreset ?? fromProduct ?? 0
+                          const source = fromPreset != null ? "loaded from menu" : fromProduct != null ? "from selected product" : null
+                          return price > 0 ? (
+                            <span>{price.toLocaleString()} RWF{source ? ` (${source})` : ""}</span>
+                          ) : (
+                            <span className="text-muted-foreground">Select a product — price loads from menu</span>
+                          )
+                        })()}
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
