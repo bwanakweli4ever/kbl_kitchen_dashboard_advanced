@@ -95,6 +95,8 @@ interface Preset {
   description?: string
   image_url?: string
   product_id: number
+  /** Dynamic price from linked product (returned by API as product_base_price) */
+  product_base_price?: number
   sauce_id?: number
   spice_level?: string
   category?: string
@@ -1127,6 +1129,14 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                             ))}
                           </SelectContent>
                         </Select>
+                        {presetForm.product_id > 0 && (() => {
+                          const product = products.find((p) => p.id === presetForm.product_id)
+                          return product ? (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Price: {product.base_price.toLocaleString()} RWF (from product)
+                            </p>
+                          ) : null
+                        })()}
                       </div>
                       <div>
                         <Label htmlFor="preset_sauce">Sauce</Label>
@@ -1304,13 +1314,16 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                     <TableHead>Image</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Product</TableHead>
+                    <TableHead>Price (RWF)</TableHead>
                     <TableHead>Ingredients</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {presets.map((preset) => (
+                  {presets.map((preset) => {
+                    const price = preset.product_base_price ?? products.find((p) => p.id === preset.product_id)?.base_price ?? 0
+                    return (
                     <TableRow key={preset.id}>
                       <TableCell>
                         {preset.image_url ? (
@@ -1339,6 +1352,9 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                         {products.find((p) => p.id === preset.product_id)?.display_name || "N/A"}
                       </TableCell>
                       <TableCell>
+                        {price > 0 ? price.toLocaleString() : "—"}
+                      </TableCell>
+                      <TableCell>
                         {preset.ingredients?.length || 0} ingredients
                       </TableCell>
                       <TableCell>
@@ -1356,7 +1372,7 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             </CardContent>
