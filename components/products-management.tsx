@@ -95,6 +95,8 @@ interface Preset {
   description?: string
   image_url?: string
   product_id: number
+  /** Optional explicit price for this preset (overrides product_base_price when set) */
+  preset_price?: number
   /** Dynamic price from linked product (returned by API as product_base_price) */
   product_base_price?: number
   sauce_id?: number
@@ -159,6 +161,7 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
     description: "",
     image_url: "",
     product_id: 0,
+    preset_price: 0,
     sauce_id: 0,
     spice_level: "mild",
     category: "sandwich",
@@ -538,6 +541,7 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
       description: preset.description || "",
       image_url: preset.image_url || "",
       product_id: preset.product_id,
+      preset_price: preset.preset_price ?? preset.product_base_price ?? 0,
       sauce_id: preset.sauce_id || 0,
       spice_level: preset.spice_level || "mild",
       category: preset.category || "sandwich",
@@ -1151,19 +1155,25 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                       </div>
                     </div>
                     <div id="preset-price-row" className="rounded-md border border-input bg-muted/50 p-3">
-                      <Label htmlFor="preset_price_display" className="text-sm font-medium">Price (RWF)</Label>
-                      <div id="preset_price_display" className="mt-1.5 flex h-10 items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium">
-                        {(() => {
-                          const linkedProduct = presetForm.product_id > 0 ? products.find((p) => p.id === presetForm.product_id) : null
-                          const fromProduct = linkedProduct?.base_price
-                          const raw = editingPreset as { product_base_price?: number; productBasePrice?: number } | null
-                          const fromApi = raw != null ? Number(raw.product_base_price ?? raw.productBasePrice) : undefined
-                          const price = fromProduct ?? (fromApi != null && !Number.isNaN(fromApi) ? fromApi : 0)
-                          if (price > 0) {
-                            return <span>{Number(price).toLocaleString()} RWF (from product)</span>
+                      <Label htmlFor="preset_price_input" className="text-sm font-medium">Preset Price (RWF)</Label>
+                      <div className="mt-1.5 flex flex-col gap-1">
+                        <Input
+                          id="preset_price_input"
+                          type="number"
+                          min={0}
+                          value={presetForm.preset_price}
+                          onChange={(e) =>
+                            setPresetForm({
+                              ...presetForm,
+                              preset_price: Number.isNaN(parseFloat(e.target.value))
+                                ? 0
+                                : parseFloat(e.target.value),
+                            })
                           }
-                          return <span className="text-muted-foreground">Select a product — price comes from product</span>
-                        })()}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          This price is charged for this preset. If left as 0, the linked product&apos;s base price will be used.
+                        </p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -1331,8 +1341,9 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
                 <TableBody>
                   {presets.map((preset) => {
                     const linkedProduct = products.find((p) => p.id === preset.product_id)
+                    const explicitPresetPrice = preset.preset_price != null ? Number(preset.preset_price) : undefined
                     const priceFromApi = preset.product_base_price != null ? Number(preset.product_base_price) : undefined
-                    const price = linkedProduct?.base_price ?? priceFromApi ?? 0
+                    const price = explicitPresetPrice ?? linkedProduct?.base_price ?? priceFromApi ?? 0
                     return (
                     <TableRow key={preset.id}>
                       <TableCell>
