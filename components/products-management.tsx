@@ -490,6 +490,7 @@ export function ProductsManagement({ token }: ProductsManagementProps) {
       image_url: "",
       product_id: 0,
       sauce_id: 0,
+      preset_price: 0, // ⚠ missing in your object
       spice_level: "mild",
       category: "sandwich",
       calories: 0,
