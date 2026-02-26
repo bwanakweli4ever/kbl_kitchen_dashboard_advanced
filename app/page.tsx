@@ -350,7 +350,16 @@ export default function KitchenDashboard() {
       });
       
       console.log(`Payment API response status: ${response.status}`);
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: any = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        data = {
+          error: "Invalid server response",
+          details: responseText?.slice(0, 500) || "Empty response",
+        };
+      }
       console.log(`Payment API response data:`, data);
       
       if (response.ok) {
@@ -949,6 +958,44 @@ ${receiverAddressSection}`;
     return 0;
   };
 
+  const calculateOrderSubtotal = (order: Order): number => {
+    try {
+      const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+      let subtotal = 0;
+
+      if (Array.isArray(items) && items.length > 0) {
+        for (const item of items) {
+          let price = item.price || 0;
+          if (price === 0) {
+            price = getPriceFromSize(item.size || order.size);
+          }
+          const quantity = item.quantity || order.quantity || 1;
+          subtotal += price * quantity;
+        }
+      } else if (order.size) {
+        const orderPrice = getPriceFromSize(order.size);
+        const orderQuantity = order.quantity || 1;
+        subtotal += orderPrice * orderQuantity;
+      }
+
+      if (order.drinks) {
+        const drinks = typeof order.drinks === 'string' ? JSON.parse(order.drinks) : order.drinks;
+        if (Array.isArray(drinks) && drinks.length > 0) {
+          for (const drink of drinks) {
+            const drinkPrice = drink.price || 1500;
+            const drinkQuantity = drink.quantity || 1;
+            subtotal += drinkPrice * drinkQuantity;
+          }
+        }
+      }
+
+      return subtotal > 0 ? subtotal : 0;
+    } catch (error) {
+      console.error('Error calculating order subtotal:', error);
+      return 0;
+    }
+  };
+
   // Calculate total from items if food_total is missing
   const calculateOrderTotal = (order: Order): number => {
     // If food_total exists and is valid, use it
@@ -1001,6 +1048,20 @@ ${receiverAddressSection}`;
     }
 
     return 0;
+  };
+
+  const getOrderPricingBreakdown = (order: Order) => {
+    const payableTotal = calculateOrderTotal(order);
+    const inferredSubtotal = calculateOrderSubtotal(order);
+    const subtotal = inferredSubtotal > 0 ? inferredSubtotal : payableTotal;
+    const loyaltyDiscount = Math.max(subtotal - payableTotal, 0);
+
+    return {
+      subtotal,
+      loyaltyDiscount,
+      payableTotal,
+      hasLoyaltyDiscount: loyaltyDiscount > 0,
+    };
   };
 
   const getSpiceLevel = (level: string | null) => {
@@ -1569,10 +1630,24 @@ ${receiverAddressSection}`;
                           </div>
                           
                           <div className="text-right">
+                              {(() => {
+                                const pricing = getOrderPricingBreakdown(order);
+                                return (
+                                  <>
                               <div className="text-lg sm:text-xl md:text-2xl font-bold text-green-600">
-                              {formatCurrency(calculateOrderTotal(order))}
+                              {formatCurrency(pricing.payableTotal)}
                             </div>
-                              <div className="text-xs sm:text-sm text-gray-500">Total</div>
+                              <div className="text-xs sm:text-sm text-gray-500">Payable Total</div>
+                              {pricing.hasLoyaltyDiscount && (
+                                <div className="mt-2 rounded-md border border-green-200 bg-green-50 px-2 py-1.5 text-right">
+                                  <div className="text-xs text-gray-700">Subtotal: {formatCurrency(pricing.subtotal)}</div>
+                                  <div className="text-xs font-semibold text-red-600">Loyalty Discount: -{formatCurrency(pricing.loyaltyDiscount)}</div>
+                                  <div className="text-xs font-semibold text-green-700">Payable: {formatCurrency(pricing.payableTotal)}</div>
+                                </div>
+                              )}
+                                  </>
+                                )
+                              })()}
                               {/* Payment Status Badge - Always Show */}
                               <div className="mt-3 flex flex-col items-end gap-2">
                                 {(() => {
@@ -1921,22 +1996,32 @@ ${receiverAddressSection}`;
                                           itemSauce = 'None';
                                         }
                                         
+                                        const rowQuantity = item.quantity || order.quantity || 1;
+                                        const coffeeSize = (item.size || order.size || '').trim();
+                                        const coffeeDisplay = `${idx + 1}. 🥪 ${coffeeParsed.type || item.name || 'Coffee'}${coffeeSize ? ` (${coffeeSize})` : ''} (x${rowQuantity})`;
+
+                                        if (coffeeParsed.isCoffee) {
+                                          return (
+                                            <tr key={idx} className="border-b border-gray-200 bg-amber-50/40">
+                                              <td className="p-3 text-xs sm:text-sm font-semibold text-gray-600">{idx + 1}</td>
+                                              <td className="p-3 text-xs sm:text-sm font-semibold text-gray-800" colSpan={5}>
+                                                {coffeeDisplay}
+                                              </td>
+                                            </tr>
+                                          );
+                                        }
+
                                                               return (
                                           <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
                                             <td className="p-3 text-xs sm:text-sm font-semibold text-gray-600">{idx + 1}</td>
                                             <td className="p-3 text-xs sm:text-sm font-semibold text-gray-800">
                                               {sizeColumnLabel != null ? (
                                                 sizeColumnLabel
-                                              ) : coffeeParsed.isCoffee ? (
-                                                <span>
-                                                  <span className="block">{coffeeParsed.type}</span>
-                                                  <span className="block text-amber-700 text-xs font-medium mt-0.5">{coffeeParsed.sugarDisplay}</span>
-                                                </span>
                                               ) : (
                                                 displaySize
                                               )}
                                             </td>
-                                            <td className="p-3 text-xs sm:text-sm text-gray-700">×{item.quantity || order.quantity || 1}</td>
+                                            <td className="p-3 text-xs sm:text-sm text-gray-700">×{rowQuantity}</td>
                                             <td className="p-3 text-xs sm:text-sm">
                                               {itemIngredients.length > 0 ? (
                                                   <div className="flex flex-wrap gap-1">
