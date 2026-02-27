@@ -62,6 +62,38 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (!wa_id) {
+      const convoController = new AbortController()
+      const convoTimeoutId = setTimeout(() => convoController.abort(), config.api.timeout)
+      try {
+        const convoResponse = await fetch(`${API_BASE_URL}/api/chat/conversations`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          signal: convoController.signal,
+        })
+        clearTimeout(convoTimeoutId)
+        if (convoResponse.ok) {
+          const conversations = await convoResponse.json()
+          if (Array.isArray(conversations)) {
+            appChatMessages = conversations.map((c: any, index: number) => ({
+              id: c.id ?? index + 1,
+              wa_id: c.user_id,
+              profile_name: c.user_name || "Customer",
+              message_type: "text",
+              body: c.message || "",
+              is_order: false,
+              created_at: c.created_at || new Date().toISOString(),
+              direction: "inbound",
+            }))
+          }
+        }
+      } catch (e) {
+        clearTimeout(convoTimeoutId)
+      }
+    }
+
     let apiUrl = `${API_BASE_URL}/messages/?limit=${limit}&offset=${offset}`
     if (wa_id) apiUrl += `&wa_id=${wa_id}`
     if (order_id) apiUrl += `&order_id=${order_id}`
@@ -177,7 +209,7 @@ export async function POST(request: NextRequest) {
     let appChatData: any = null
 
     // Keep WhatsApp active while allowing in-app support thread replies.
-    if (order_id) {
+    {
       const appChatController = new AbortController()
       const appChatTimeoutId = setTimeout(() => appChatController.abort(), config.api.timeout)
       try {

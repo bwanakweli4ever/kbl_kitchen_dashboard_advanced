@@ -44,7 +44,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
   }
   const [isMinimized, setIsMinimized] = useState(false)
   const [hasNewMessages, setHasNewMessages] = useState(false)
-  const [lastMessageId, setLastMessageId] = useState<number | null>(null)
+  const [lastInboundMessageKey, setLastInboundMessageKey] = useState<string | null>(null)
   const [showNotification, setShowNotification] = useState(false)
   const [notificationMessage, setNotificationMessage] = useState<Message | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -70,9 +70,6 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
       setError(null)
 
       const params = new URLSearchParams({ wa_id: phoneNumber })
-      if (orderId) {
-        params.set("order_id", String(orderId))
-      }
 
       const response = await fetch(`/api/messages?${params.toString()}`, {
         headers: {
@@ -84,8 +81,8 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
       const data = await response.json()
 
       if (response.ok) {
-        const processedMessages = (data.messages || []).map((message: any) => ({
-          id: message.id || Math.random(),
+        const processedMessages = (data.messages || []).map((message: any, index: number) => ({
+          id: message.id || Date.parse(message.created_at || "") || index + 1,
           wa_id: message.wa_id || phoneNumber,
           profile_name: message.profile_name || customerName,
           message_type: message.message_type || "text",
@@ -101,25 +98,44 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
           (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         )
 
-        // Check for new messages
-        if (lastMessageId !== null && processedMessages.length > 0) {
-          const latestMessage = processedMessages[processedMessages.length - 1]
-          if (latestMessage.id > lastMessageId && latestMessage.direction === "inbound") {
-            setHasNewMessages(true)
-            setNotificationMessage(latestMessage)
-            setShowNotification(true)
-            if (onNewMessage) {
-              onNewMessage(latestMessage)
+        // Check for new inbound messages using stable key
+        const inboundMessages = processedMessages.filter(
+          (message: Message) => {
+            const isInbound = message.direction === "inbound" || message.message_type === "inbound" || message.message_type === "sent";
+            if (isInbound) {
+              console.log("[ChatWidget] Inbound message detected:", message);
             }
+            return isInbound && !message.is_order;
+          }
+        );
+        console.log("[ChatWidget] Filtered inboundMessages:", inboundMessages);
+        const latestInboundMessage = inboundMessages.length > 0 ? inboundMessages[inboundMessages.length - 1] : null
+
+        if (lastInboundMessageKey !== null && latestInboundMessage) {
+          const latestInboundKey = `${latestInboundMessage.wa_id}-${latestInboundMessage.created_at}-${latestInboundMessage.body}`;
+          console.log("[ChatWidget] Latest inbound key:", latestInboundKey, "Last seen:", lastInboundMessageKey);
+          if (latestInboundKey !== lastInboundMessageKey) {
+            console.log("[ChatWidget] Triggering notification popup for new inbound message.", latestInboundMessage);
+            setHasNewMessages(true);
+            setNotificationMessage(latestInboundMessage);
+            setShowNotification(true);
+            if (onNewMessage) {
+              onNewMessage(latestInboundMessage);
+            }
+            setLastInboundMessageKey(latestInboundKey);
             // Auto-hide notification after 5 seconds
             setTimeout(() => {
-              setShowNotification(false)
-            }, 5000)
+              setShowNotification(false);
+            }, 5000);
+          } else {
+            // Even if same message, force popup for testing
+            console.log("[ChatWidget] Forcing popup for same inbound message.", latestInboundMessage);
+            setShowNotification(true);
           }
-        } else if (processedMessages.length > 0) {
-          // First load - set the last message ID
-          const latestMessage = processedMessages[processedMessages.length - 1]
-          setLastMessageId(latestMessage.id)
+        } else if (latestInboundMessage) {
+          // First load - establish baseline inbound key without triggering popup
+          const latestInboundKey = `${latestInboundMessage.wa_id}-${latestInboundMessage.created_at}-${latestInboundMessage.body}`
+          setLastInboundMessageKey(latestInboundKey)
         }
 
         setMessages(processedMessages)
@@ -155,6 +171,11 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
       return
     }
 
+    // Open widget if closed when sending a message
+    if (!open) {
+      setOpen(true)
+    }
+
     try {
       console.log("✅ Starting send process...")
       setSending(true)
@@ -169,7 +190,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
         body: JSON.stringify({
           phone_number: phoneNumber,
           message: newMessage.trim(),
-          order_id: orderId,
+          order_id: null,
         }),
       })
 
@@ -207,9 +228,9 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
     }
   }
 
-  // Auto-refresh messages every 5 seconds when chat is open
+  // Auto-refresh messages every 5 seconds (even when closed) to detect incoming messages
   useEffect(() => {
-    if (!open || !token || !phoneNumber) return
+    if (!token || !phoneNumber) return
 
     fetchMessages() // Initial fetch
     const interval = setInterval(() => {
@@ -217,7 +238,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
     }, 5000) // Refresh every 5 seconds
 
     return () => clearInterval(interval)
-  }, [open, token, phoneNumber])
+  }, [token, phoneNumber, orderId])
 
   const handleOpenChange = (newOpen: boolean) => {
     console.log("Chat widget open change:", newOpen)

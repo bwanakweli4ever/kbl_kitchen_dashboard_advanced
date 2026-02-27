@@ -109,6 +109,8 @@ export default function KitchenDashboard() {
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [chatWidgetState, setChatWidgetState] = useState<{ open: boolean; waId: string; customerName: string; orderId?: number } | null>(null);
+  const lastSeenInboundByCustomerRef = useRef<Record<string, string>>({});
+  const hasInitializedMessageWatcherRef = useRef(false);
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -1283,6 +1285,88 @@ ${receiverAddressSection}`;
     setIsOrderModalOpen(true);
   };
 
+  useEffect(() => {
+    if (!token || !isAuthenticated) return;
+
+    let isCancelled = false;
+
+    const checkForIncomingMessages = async () => {
+      try {
+        const response = await fetch("/api/messages?limit=50", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        const messages = Array.isArray(data?.messages) ? data.messages : [];
+        const inboundMessages = messages.filter(
+          (message: any) => {
+            if (!message?.direction || message.direction !== "inbound") return false;
+            if (!message?.wa_id) return false;
+            if (message?.is_order) return false;
+            // Exclude order notification messages
+            if (typeof message.body === "string" && message.body.trim().startsWith("🥪 New order from KBL Bites")) return false;
+            // Suppress for user 250792519179 unless a new, non-duplicate chat message
+            if (message.wa_id === "250792519179") {
+              const lastSeen = lastSeenInboundByCustomerRef.current["250792519179"];
+              const messageKey = `250792519179-${message.created_at}-${message.body}`;
+              if (lastSeen === messageKey) return false;
+              // Exclude if message body matches known order notification or is unchanged
+              if (typeof message.body === "string" && (message.body.includes("order") || message.body.includes("add-ons"))) return false;
+            }
+            return true;
+          }
+        );
+        if (inboundMessages.length === 0) return;
+        inboundMessages.sort(
+          (a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime(),
+        );
+        // Only show popup for customers with unseen inbound messages
+        // Batch notifications: only one per customer per poll, and only if chat not open
+        const customersToNotify: { wa_id: string; profile_name: string; messageKey: string }[] = [];
+        // Track open chats per customer
+        const openChatsByCustomerRef = useRef<Record<string, boolean>>({});
+        if (chatWidgetState && chatWidgetState.waId && chatWidgetState.open) {
+          openChatsByCustomerRef.current[chatWidgetState.waId] = true;
+        }
+        for (const inbound of inboundMessages) {
+          const customerKey = inbound.wa_id;
+          const messageKey = `${inbound.wa_id}-${inbound.created_at}-${inbound.body}`;
+          // Only suppress duplicate notifications for same message
+          if (lastSeenInboundByCustomerRef.current[customerKey] === messageKey) continue;
+          if (!hasInitializedMessageWatcherRef.current) {
+            lastSeenInboundByCustomerRef.current[customerKey] = messageKey;
+            hasInitializedMessageWatcherRef.current = true;
+            continue;
+          }
+          customersToNotify.push({ wa_id: customerKey, profile_name: inbound.profile_name || "Customer", messageKey });
+        }
+        if (customersToNotify.length > 0 && activeTab !== "messages") {
+          // Only notify for the most recent new customer/message in this poll
+          const notify = customersToNotify[customersToNotify.length - 1];
+          console.log("[Chat Popup] Triggering floating widget for inbound message:", notify);
+          notificationSystem.triggerNewMessageNotification(1);
+          setChatWidgetState((prev) => ({
+            open: true,
+            waId: notify.wa_id,
+            customerName: notify.profile_name || prev?.customerName || "Customer",
+            orderId: prev?.waId === notify.wa_id ? prev.orderId : undefined,
+          }));
+        }
+      } catch (error) {
+        console.log("Incoming message watcher skipped due to network error");
+      }
+    };
+    checkForIncomingMessages();
+    const interval = setInterval(checkForIncomingMessages, 5000);
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [token, isAuthenticated, notificationSystem.triggerNewMessageNotification]);
+
 
   if (!isAuthenticated) {
     return (
@@ -2410,25 +2494,50 @@ ${receiverAddressSection}`;
         />
         
         {/* Floating Chat Widget - rendered at page level */}
-        {chatWidgetState && token && (
-          <ChatWidget
-            customerName={chatWidgetState.customerName}
-            phoneNumber={chatWidgetState.waId}
-            orderId={chatWidgetState.orderId}
-            token={token}
-            open={chatWidgetState.open}
-            onOpenChange={(open) => {
-              if (!open) {
-                setChatWidgetState(null);
-              } else {
-                setChatWidgetState({ ...chatWidgetState, open: true });
-              }
-            }}
-            onNewMessage={(message) => {
-              console.log("New message received:", message);
-            }}
-          />
-        )}
+        {(() => {
+          if (chatWidgetState && token) {
+            console.log("[page.tsx] Rendering ChatWidget", {
+              customerName: chatWidgetState.customerName,
+              phoneNumber: chatWidgetState.waId,
+              orderId: chatWidgetState.orderId,
+              token,
+              open: chatWidgetState.open
+            });
+            return (
+              <ChatWidget
+                customerName={chatWidgetState.customerName}
+                phoneNumber={chatWidgetState.waId}
+                orderId={chatWidgetState.orderId}
+                token={token}
+                trigger={(
+                  <button
+                    className="fixed bottom-4 right-4 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-green-600 text-white shadow-xl hover:bg-green-700 transition-colors"
+                    title={`Open chat with ${chatWidgetState.customerName}`}
+                    aria-label={`Open chat with ${chatWidgetState.customerName}`}
+                  >
+                    <MessageSquare className="h-6 w-6" />
+                  </button>
+                )}
+                open={chatWidgetState.open}
+                onOpenChange={(open) => {
+                  setChatWidgetState((prev) => {
+                    if (!prev) return prev;
+                    return { ...prev, open };
+                  });
+                }}
+                onNewMessage={(message) => {
+                  console.log("New message received:", message);
+                  notificationSystem.triggerNewMessageNotification(1);
+                  setChatWidgetState((prev) => {
+                    if (!prev) return prev;
+                    return { ...prev, open: true };
+                  });
+                }}
+              />
+            );
+          }
+          return null;
+        })()}
       </div>
     );
   }
