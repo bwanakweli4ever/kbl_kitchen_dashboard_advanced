@@ -108,7 +108,7 @@ export default function KitchenDashboard() {
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [chatWidgetState, setChatWidgetState] = useState<{ open: boolean; waId: string; customerName: string } | null>(null);
+  const [chatWidgetState, setChatWidgetState] = useState<{ open: boolean; waId: string; customerName: string; orderId?: number } | null>(null);
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -1714,7 +1714,8 @@ ${receiverAddressSection}`;
                                       setChatWidgetState({ 
                                         open: true, 
                                         waId: order.wa_id, 
-                                        customerName: order.profile_name 
+                                        customerName: order.profile_name,
+                                        orderId: order.id,
                                       });
                                     }}
                                     className="inline-flex items-center justify-center gap-2 px-5 py-3 text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg active:scale-95 touch-manipulation min-h-[48px] min-w-[140px]"
@@ -2400,8 +2401,8 @@ ${receiverAddressSection}`;
           getSizeDisplayName={getSizeDisplayName}
           getSpiceLevel={getSpiceLevel}
           parseCoffeeItem={parseCoffeeItem}
-          onOpenChat={(waId, customerName) => {
-            setChatWidgetState({ open: true, waId, customerName });
+          onOpenChat={(waId, customerName, orderId) => {
+            setChatWidgetState({ open: true, waId, customerName, orderId });
           }}
           onUpdateOrder={updateOrderStatus}
           onOrderUpdated={handleOrderStatusUpdated}
@@ -2413,6 +2414,7 @@ ${receiverAddressSection}`;
           <ChatWidget
             customerName={chatWidgetState.customerName}
             phoneNumber={chatWidgetState.waId}
+            orderId={chatWidgetState.orderId}
             token={token}
             open={chatWidgetState.open}
             onOpenChange={(open) => {

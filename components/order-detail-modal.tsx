@@ -170,7 +170,7 @@ interface OrderDetailModalProps {
   getSizeDisplayName: (productName: string) => string
   getSpiceLevel: (level: string | null) => { color: string; icon: JSX.Element; label: string }
   parseCoffeeItem?: (item: any) => { isCoffee: boolean; type: string; sugarDisplay: string }
-  onOpenChat?: (waId: string, customerName: string) => void
+  onOpenChat?: (waId: string, customerName: string, orderId?: number) => void
   onUpdateOrder?: (orderId: number, status: string, riderName?: string, riderPhone?: string, deliveryComment?: string) => Promise<void>
   onOrderUpdated?: (forceRefresh?: boolean) => void
   token?: string | null
@@ -561,7 +561,7 @@ export function OrderDetailModal({
           <Button
             onClick={() => {
               if (onOpenChat && order) {
-                onOpenChat(order.wa_id, order.profile_name)
+                onOpenChat(order.wa_id, order.profile_name, order.id)
               }
             }}
             variant="default"

@@ -69,7 +69,12 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
       setLoading(true)
       setError(null)
 
-      const response = await fetch(`/api/messages?wa_id=${phoneNumber}`, {
+      const params = new URLSearchParams({ wa_id: phoneNumber })
+      if (orderId) {
+        params.set("order_id", String(orderId))
+      }
+
+      const response = await fetch(`/api/messages?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -164,6 +169,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
         body: JSON.stringify({
           phone_number: phoneNumber,
           message: newMessage.trim(),
+          order_id: orderId,
         }),
       })
 
