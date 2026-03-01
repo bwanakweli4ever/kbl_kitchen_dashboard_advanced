@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { User, Phone, RefreshCw, Search, Filter, ChevronLeft, ChevronRight, Download } from "lucide-react"
+import { User, Phone, RefreshCw, Search, Filter, ChevronLeft, ChevronRight, Download, MessageSquare } from "lucide-react"
 import { ChatWidget } from "./chat-widget"
 
 interface Customer {
@@ -391,7 +391,18 @@ export function CustomersTableView({ token }: CustomersTableViewProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <ChatWidget customerName={customer.profile_name} phoneNumber={customer.wa_id} token={token} />
+                    <ChatWidget
+                      key={`chat-${customer.wa_id}`}
+                      customerName={customer.profile_name}
+                      phoneNumber={customer.wa_id}
+                      token={token}
+                      trigger={
+                        <Button variant="outline" size="sm" className="flex items-center gap-1 bg-transparent">
+                          <MessageSquare className="h-4 w-4" />
+                          Chat
+                        </Button>
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ))}

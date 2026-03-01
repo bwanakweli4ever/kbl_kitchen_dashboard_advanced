@@ -296,9 +296,16 @@ export function MessagesView({ token }: MessagesViewProps) {
                     {conversation.lastMessage.is_order ? "Order" : conversation.lastMessage.message_type}
                   </Badge>
                   <ChatWidget
+                    key={`chat-${conversation.customer.wa_id}`}
                     customerName={conversation.customer.profile_name}
                     phoneNumber={conversation.customer.wa_id}
                     token={token}
+                    trigger={
+                      <Button variant="outline" size="sm" className="flex items-center gap-1 bg-transparent">
+                        <MessageSquare className="h-4 w-4" />
+                        Chat
+                      </Button>
+                    }
                   />
                 </div>
               </div>

@@ -22,6 +22,9 @@ export async function GET(request: NextRequest) {
     const is_order = url.searchParams.get("is_order")
 
     let appChatMessages: any[] = []
+    const normalizeWaId = (value: string | null | undefined) => (value || "").replace(/[^\d]/g, "")
+    const requestedWaIdNormalized = normalizeWaId(wa_id)
+
     if (wa_id) {
       const chatUrl = new URL(`${API_BASE_URL}/api/chat/messages`)
       chatUrl.searchParams.set("wa_id", wa_id)
@@ -45,7 +48,7 @@ export async function GET(request: NextRequest) {
         if (chatResponse.ok) {
           const chatData = await chatResponse.json()
           const chatMessages = Array.isArray(chatData) ? chatData : []
-          appChatMessages = chatMessages.map((m: any) => ({
+            appChatMessages = chatMessages.map((m: any) => ({
               id: m.id,
               wa_id: m.user_id,
               profile_name: m.user_name || "Customer",
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
               created_at: m.created_at,
               direction: m.is_from_customer ? "inbound" : "outbound",
               order_id: m.order_id,
-            }))
+            })).filter((m: any) => normalizeWaId(m.wa_id) === requestedWaIdNormalized)
         }
       } catch (e) {
         clearTimeout(chatTimeoutId)
@@ -128,9 +131,12 @@ export async function GET(request: NextRequest) {
         data = { messages: [], count: 0 }
       }
       const legacyMessages = Array.isArray(data.messages) ? data.messages : []
+      const strictLegacyMessages = wa_id
+        ? legacyMessages.filter((m: any) => normalizeWaId(m?.wa_id) === requestedWaIdNormalized)
+        : legacyMessages
 
       if (appChatMessages.length > 0) {
-        const merged = [...legacyMessages, ...appChatMessages]
+        const merged = [...strictLegacyMessages, ...appChatMessages]
         const seen = new Set<string>()
         const deduped = merged.filter((m: any) => {
           const key = `${m.id}-${m.wa_id}-${m.created_at}-${m.direction}-${m.body}`
@@ -144,6 +150,14 @@ export async function GET(request: NextRequest) {
           messages: deduped,
           count: deduped.length,
           source: "merged",
+        })
+      }
+
+      if (wa_id) {
+        return NextResponse.json({
+          ...data,
+          messages: strictLegacyMessages,
+          count: strictLegacyMessages.length,
         })
       }
 

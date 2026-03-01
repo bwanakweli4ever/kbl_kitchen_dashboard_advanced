@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { User, Phone, ShoppingBag, RefreshCw } from "lucide-react"
+import { User, Phone, ShoppingBag, RefreshCw, MessageSquare } from "lucide-react"
 import { ChatWidget } from "./chat-widget"
 
 interface Customer {
@@ -200,7 +200,18 @@ export function CustomersView({ token }: CustomersViewProps) {
                   </div>
                 </div>
               )}
-              <ChatWidget customerName={customer.profile_name} phoneNumber={customer.wa_id} token={token} />
+              <ChatWidget
+                key={`chat-${customer.wa_id}`}
+                customerName={customer.profile_name}
+                phoneNumber={customer.wa_id}
+                token={token}
+                trigger={
+                  <Button variant="outline" size="sm" className="w-full flex items-center gap-2 bg-transparent">
+                    <MessageSquare className="h-4 w-4" />
+                    Open Chat
+                  </Button>
+                }
+              />
             </CardContent>
           </Card>
         ))}

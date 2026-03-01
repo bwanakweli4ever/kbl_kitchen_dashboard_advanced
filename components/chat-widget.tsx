@@ -31,6 +31,19 @@ interface ChatWidgetProps {
   onOpenChange?: (open: boolean) => void
 }
 
+const SUPPORT_KEYWORDS = [
+  "support",
+  "help",
+  "agent",
+  "assist",
+  "issue",
+  "problem",
+  "complaint",
+  "urgent",
+]
+
+const normalizeWaId = (value?: string | null) => (value || "").replace(/[^\d]/g, "")
+
 export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId, onNewMessage, defaultOpen = false, open: controlledOpen, onOpenChange }: ChatWidgetProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen
@@ -53,6 +66,43 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fetchRequestIdRef = useRef(0)
+  const currentPhoneRef = useRef(phoneNumber)
+  const lastInboundMessageKeyRef = useRef<string | null>(null)
+  const notificationAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  const playNotificationSound = async () => {
+    try {
+      if (!notificationAudioRef.current) {
+        notificationAudioRef.current = new Audio("/sounds/simple-notification.mp3")
+        notificationAudioRef.current.preload = "auto"
+      }
+
+      const audio = notificationAudioRef.current
+      audio.pause()
+      audio.currentTime = 0
+      audio.volume = 1
+      await audio.play()
+    } catch (error) {
+      try {
+        const fallbackAudio = new Audio("/sounds/here.wav")
+        fallbackAudio.preload = "auto"
+        fallbackAudio.volume = 1
+        await fallbackAudio.play()
+      } catch (fallbackError) {
+        console.warn("[ChatWidget] Notification sound playback failed", fallbackError)
+      }
+    }
+  }
+
+  const handleMessageInputChange = (value: string) => {
+    setNewMessage(value)
+
+    if (!inputRef.current) return
+    inputRef.current.style.height = "auto"
+    inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 140)}px`
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -64,6 +114,9 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
 
   const fetchMessages = async () => {
     if (!token || !phoneNumber) return
+
+    const requestId = ++fetchRequestIdRef.current
+    const expectedWaId = normalizeWaId(phoneNumber)
 
     try {
       setLoading(true)
@@ -91,7 +144,11 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
           is_order: message.is_order || false,
           created_at: message.created_at || new Date().toISOString(),
           direction: message.direction || "inbound",
-        }))
+        })).filter((message: Message) => normalizeWaId(message.wa_id) === expectedWaId)
+
+        if (requestId !== fetchRequestIdRef.current || currentPhoneRef.current !== phoneNumber) {
+          return
+        }
 
         // Sort messages by timestamp
         processedMessages.sort(
@@ -99,42 +156,54 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
         )
 
         // Check for new inbound messages using stable key
-        const inboundMessages = processedMessages.filter(
-          (message: Message) => {
-            const isInbound = message.direction === "inbound" || message.message_type === "inbound" || message.message_type === "sent";
-            if (isInbound) {
-              console.log("[ChatWidget] Inbound message detected:", message);
-            }
-            return isInbound && !message.is_order;
+        const inboundMessages = processedMessages.filter((message: Message) => {
+          const direction = (message.direction || "").toLowerCase()
+          const messageType = (message.message_type || "").toLowerCase()
+          const isOutboundLike = direction === "outbound" || messageType === "sent" || messageType === "outbound"
+          const isInboundLike = direction === "inbound" || messageType === "inbound" || messageType === "received"
+          const isInbound = !isOutboundLike && isInboundLike
+
+          if (isInbound) {
+            console.log("[ChatWidget] Inbound message detected:", message)
           }
-        );
+
+          return isInbound
+        })
         console.log("[ChatWidget] Filtered inboundMessages:", inboundMessages);
         const latestInboundMessage = inboundMessages.length > 0 ? inboundMessages[inboundMessages.length - 1] : null
 
-        if (lastInboundMessageKey !== null && latestInboundMessage) {
-          const latestInboundKey = `${latestInboundMessage.wa_id}-${latestInboundMessage.created_at}-${latestInboundMessage.body}`;
-          console.log("[ChatWidget] Latest inbound key:", latestInboundKey, "Last seen:", lastInboundMessageKey);
-          if (latestInboundKey !== lastInboundMessageKey) {
+        const previousInboundKey = lastInboundMessageKeyRef.current
+
+        if (previousInboundKey !== null && latestInboundMessage) {
+          const latestInboundKey = `${latestInboundMessage.id}-${latestInboundMessage.wa_id}-${latestInboundMessage.created_at}-${latestInboundMessage.body}`;
+          console.log("[ChatWidget] Latest inbound key:", latestInboundKey, "Last seen:", previousInboundKey);
+          if (latestInboundKey !== previousInboundKey) {
             console.log("[ChatWidget] Triggering notification popup for new inbound message.", latestInboundMessage);
             setHasNewMessages(true);
             setNotificationMessage(latestInboundMessage);
             setShowNotification(true);
+            void playNotificationSound()
             if (onNewMessage) {
               onNewMessage(latestInboundMessage);
             }
+            lastInboundMessageKeyRef.current = latestInboundKey
             setLastInboundMessageKey(latestInboundKey);
+            const messageBody = (latestInboundMessage.body || "").toLowerCase()
+            const shouldAutoOpenSupport = SUPPORT_KEYWORDS.some((keyword) => messageBody.includes(keyword))
+            if (shouldAutoOpenSupport) {
+              setOpen(true)
+              setIsMinimized(false)
+              setShowNotification(false)
+            }
             // Auto-hide notification after 5 seconds
             setTimeout(() => {
               setShowNotification(false);
             }, 5000);
-          } else {
-            // Even if same message, force popup for testing
-            console.log("[ChatWidget] Forcing popup for same inbound message.", latestInboundMessage);
-            setShowNotification(true);
           }
         } else if (latestInboundMessage) {
           // First load - establish baseline inbound key without triggering popup
-          const latestInboundKey = `${latestInboundMessage.wa_id}-${latestInboundMessage.created_at}-${latestInboundMessage.body}`
+          const latestInboundKey = `${latestInboundMessage.id}-${latestInboundMessage.wa_id}-${latestInboundMessage.created_at}-${latestInboundMessage.body}`
+          lastInboundMessageKeyRef.current = latestInboundKey
           setLastInboundMessageKey(latestInboundKey)
         }
 
@@ -232,6 +301,16 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
   useEffect(() => {
     if (!token || !phoneNumber) return
 
+    currentPhoneRef.current = phoneNumber
+    setMessages([])
+    setNewMessage("")
+    setError(null)
+    setHasNewMessages(false)
+    setNotificationMessage(null)
+    setShowNotification(false)
+    lastInboundMessageKeyRef.current = null
+    setLastInboundMessageKey(null)
+
     fetchMessages() // Initial fetch
     const interval = setInterval(() => {
       fetchMessages()
@@ -316,10 +395,10 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div className="fixed bottom-2 left-2 right-2 z-50 flex flex-col gap-2 sm:bottom-4 sm:left-auto sm:right-4">
       {/* New Message Notification Popup */}
       {showNotification && notificationMessage && !open && (
-        <div className="bg-white rounded-lg shadow-2xl border-2 border-green-400 p-4 w-80 animate-in slide-in-from-bottom-5">
+        <div className="bg-white rounded-xl shadow-2xl border-2 border-green-400 p-4 w-full sm:w-80 max-w-md animate-in slide-in-from-bottom-5">
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">
               <Bell className="h-5 w-5 text-green-600 animate-pulse" />
@@ -361,12 +440,14 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
       {open && (
         <div
           className={cn(
-            "bg-white rounded-lg shadow-2xl border-2 border-gray-200 flex flex-col transition-all duration-300",
-            isMinimized ? "w-80 h-16" : "w-96 h-[600px]"
+            "bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col transition-all duration-300 overflow-hidden",
+            isMinimized
+              ? "w-full sm:w-80 h-16"
+              : "w-full sm:w-96 h-[calc(100dvh-1rem)] sm:h-[600px] max-h-[calc(100dvh-1rem)]"
           )}
         >
         {/* Header */}
-        <div className="p-4 pb-2 border-b bg-gradient-to-r from-green-50 to-blue-50 flex items-center justify-between rounded-t-lg">
+        <div className="p-3 sm:p-4 pb-2 border-b bg-gradient-to-r from-green-50 to-emerald-50 flex items-center justify-between rounded-t-2xl">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
               <User className="h-5 w-5 text-green-600" />
@@ -422,7 +503,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
         {/* Messages Area - Only show when not minimized */}
         {!isMinimized && (
           <>
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 bg-gradient-to-b from-white to-gray-50/60">
               {loading && messages.length === 0 ? (
                 <div className="flex items-center justify-center h-32">
                   <div className="text-center">
@@ -562,15 +643,16 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
             {error && <div className="mx-4 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">{error}</div>}
 
             {/* Message Input */}
-            <div className="p-4 border-t bg-white">
+            <div className="p-3 sm:p-4 border-t bg-white/95 backdrop-blur sticky bottom-0" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
               <div className="flex gap-2 items-end">
                 {/* Text Input */}
                 <div className="flex-1">
                   <textarea
+                    ref={inputRef}
                     value={newMessage}
                     onChange={(e) => {
                       console.log("Input changed:", e.target.value)
-                      setNewMessage(e.target.value)
+                      handleMessageInputChange(e.target.value)
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
@@ -580,10 +662,11 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
                       }
                     }}
                     placeholder="Type a message..."
-                    className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    rows={2}
+                    className="w-full p-3 border border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm sm:text-base leading-5"
+                    rows={1}
                     maxLength={1000}
                     disabled={sending}
+                    style={{ minHeight: 44 }}
                   />
                   <div className="text-xs text-gray-500 mt-1">{newMessage.length}/1000 characters</div>
                 </div>
