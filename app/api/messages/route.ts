@@ -2,8 +2,15 @@ import { type NextRequest, NextResponse } from "next/server"
 import { config } from "@/lib/config"
 
 const API_BASE_URL = process.env.WHATSAPP_API_URL || config.api.baseUrl
+const MESSAGE_CACHE_TTL_MS = 2 * 60 * 1000
+const messageResponseCache = new Map<string, { data: any; at: number }>()
+
+function buildMessageCacheKey(limit: string, offset: string, wa_id: string | null, order_id: string | null, message_type: string | null, is_order: string | null) {
+  return [limit, offset, wa_id || '', order_id || '', message_type || '', is_order || ''].join('|')
+}
 
 export async function GET(request: NextRequest) {
+  let cacheKey = ""
   try {
     const authorization = request.headers.get("authorization")
 
@@ -20,6 +27,13 @@ export async function GET(request: NextRequest) {
     const order_id = url.searchParams.get("order_id")
     const message_type = url.searchParams.get("message_type")
     const is_order = url.searchParams.get("is_order")
+    const summaryOnly = !wa_id && !order_id && !message_type && !is_order
+    cacheKey = buildMessageCacheKey(limit, offset, wa_id, order_id, message_type, is_order)
+
+    const cachedResponse = messageResponseCache.get(cacheKey)
+    if (cachedResponse && Date.now() - cachedResponse.at <= MESSAGE_CACHE_TTL_MS) {
+      return NextResponse.json(cachedResponse.data)
+    }
 
     let appChatMessages: any[] = []
     const normalizeWaId = (value: string | null | undefined) => (value || "").replace(/[^\d]/g, "")
@@ -95,6 +109,20 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         clearTimeout(convoTimeoutId)
       }
+
+      if (summaryOnly) {
+        const summaryData = {
+          messages: appChatMessages,
+          count: appChatMessages.length,
+          total_count: appChatMessages.length,
+          limit: Number(limit),
+          offset: Number(offset),
+          has_more: false,
+          source: "conversation_summary",
+        }
+        messageResponseCache.set(cacheKey, { data: summaryData, at: Date.now() })
+        return NextResponse.json(summaryData)
+      }
     }
 
     let apiUrl = `${API_BASE_URL}/messages/?limit=${limit}&offset=${offset}`
@@ -135,6 +163,8 @@ export async function GET(request: NextRequest) {
         ? legacyMessages.filter((m: any) => normalizeWaId(m?.wa_id) === requestedWaIdNormalized)
         : legacyMessages
 
+      let responseData = data
+
       if (appChatMessages.length > 0) {
         const merged = [...strictLegacyMessages, ...appChatMessages]
         const seen = new Set<string>()
@@ -145,30 +175,39 @@ export async function GET(request: NextRequest) {
           return true
         })
         deduped.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-        return NextResponse.json({
+        responseData = {
           ...data,
           messages: deduped,
           count: deduped.length,
           source: "merged",
-        })
-      }
-
-      if (wa_id) {
-        return NextResponse.json({
+        }
+      } else if (wa_id) {
+        responseData = {
           ...data,
           messages: strictLegacyMessages,
           count: strictLegacyMessages.length,
-        })
+        }
       }
 
-      return NextResponse.json(data)
+      messageResponseCache.set(cacheKey, { data: responseData, at: Date.now() })
+      return NextResponse.json(responseData)
     } else {
       if (appChatMessages.length > 0) {
-        return NextResponse.json({
+        const fallbackData = {
           messages: appChatMessages,
           count: appChatMessages.length,
+          total_count: appChatMessages.length,
+          limit: Number(limit),
+          offset: Number(offset),
+          has_more: false,
           source: "app_chat_fallback",
-        })
+        }
+        messageResponseCache.set(cacheKey, { data: fallbackData, at: Date.now() })
+        return NextResponse.json(fallbackData)
+      }
+      const cached = messageResponseCache.get(cacheKey)
+      if (cached && Date.now() - cached.at <= MESSAGE_CACHE_TTL_MS) {
+        return NextResponse.json(cached.data)
       }
       console.error("❌ Messages API Error:", response.status, responseText)
       return NextResponse.json(
@@ -182,6 +221,11 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error("💥 Messages fetch error:", error)
+
+    const cached = messageResponseCache.get(cacheKey)
+    if (cached && Date.now() - cached.at <= MESSAGE_CACHE_TTL_MS) {
+      return NextResponse.json(cached.data)
+    }
     
     // Check if it's a connection error
     const isConnectionError = error instanceof Error && (
