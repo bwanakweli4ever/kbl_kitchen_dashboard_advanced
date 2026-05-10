@@ -83,7 +83,7 @@ export function MessagesView({ token }: MessagesViewProps) {
 
       const preferredName = candidateNames.find((name) => {
         const trimmed = (name || "").trim()
-        return trimmed.length > 0 && !isSupportAlias(trimmed)
+        return trimmed.length > 0 && !isWeakCustomerName(trimmed)
       })
 
       return preferredName || mappedCustomerName || fallbackCustomerName(waId)

@@ -15,6 +15,11 @@ function fallbackCustomerName(waId: string | null | undefined) {
   return "Unknown Customer"
 }
 
+function isWeakCustomerName(value: string | null | undefined) {
+  const normalized = (value || "").trim().toLowerCase()
+  return !normalized || normalized === "unknown customer" || normalized === "customer" || isSupportAlias(normalized)
+}
+
 function buildMessageCacheKey(limit: string, offset: string, wa_id: string | null, order_id: string | null, message_type: string | null, is_order: string | null) {
   return [limit, offset, wa_id || '', order_id || '', message_type || '', is_order || ''].join('|')
 }
@@ -199,11 +204,32 @@ export async function GET(request: NextRequest) {
           seen.add(key)
           return true
         })
-        deduped.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+        const bestNameByWaId = new Map<string, string>()
+        for (const message of deduped) {
+          const waId = message?.wa_id
+          const profileName = message?.profile_name
+          if (!waId || isWeakCustomerName(profileName)) continue
+          if (!bestNameByWaId.has(waId)) {
+            bestNameByWaId.set(waId, profileName)
+          }
+        }
+
+        const normalizedMessages = deduped.map((message: any) => {
+          if (!isWeakCustomerName(message?.profile_name)) return message
+          const bestName = bestNameByWaId.get(message?.wa_id)
+          if (!bestName) return message
+          return {
+            ...message,
+            profile_name: bestName,
+          }
+        })
+
+        normalizedMessages.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         responseData = {
           ...data,
-          messages: deduped,
-          count: deduped.length,
+          messages: normalizedMessages,
+          count: normalizedMessages.length,
           source: "merged",
         }
       } else if (wa_id) {
