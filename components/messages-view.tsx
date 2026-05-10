@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MessageSquare, RefreshCw, User, Clock, Send, MessageCircle, Download } from "lucide-react"
 import { ChatWidget } from "./chat-widget"
+import { LoadMoreButton } from "./pagination/load-more"
+import { config } from "@/lib/config"
 
 interface Message {
   id: number
@@ -23,85 +25,138 @@ interface MessagesViewProps {
   token: string | null
 }
 
+interface MessagesResponse {
+  messages: Array<Record<string, any>>
+  count: number
+  total_count: number
+  limit: number
+  offset: number
+  has_more: boolean
+}
+
+const PAGE_SIZE = config.dashboard.pageSize || 20
+
 export function MessagesView({ token }: MessagesViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [totalCount, setTotalCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState<string>("all")
 
-  const fetchMessages = async () => {
+  const isFetchingRef = useRef(false)
+  const requestIdRef = useRef(0)
+
+  const fetchMessagesPage = useCallback(async (page: number, reset = false) => {
+    if (!token || isFetchingRef.current) return
+
+    const requestId = ++requestIdRef.current
+    const offset = page * PAGE_SIZE
+
     try {
-      setLoading(true)
-      if (!token) {
-        setError("No authentication token available")
-        return
+      isFetchingRef.current = true
+      if (reset) {
+        setLoading(true)
+        setError(null)
+      } else {
+        setLoadingMore(true)
       }
 
-      let apiUrl = "/api/messages"
       const params = new URLSearchParams()
-
-      if (searchTerm) params.append("wa_id", searchTerm)
+      params.append("limit", String(PAGE_SIZE))
+      params.append("offset", String(offset))
+      if (searchTerm.trim()) params.append("wa_id", searchTerm.trim())
       if (filterType !== "all") params.append("message_type", filterType)
 
-      if (params.toString()) {
-        apiUrl += `?${params.toString()}`
-      }
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 20000)
 
-      const response = await fetch(apiUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
+      const response = await (async () => {
+        try {
+          return await fetch(`/api/messages?${params.toString()}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            cache: "no-store",
+            signal: controller.signal,
+          })
+        } finally {
+          clearTimeout(timeoutId)
+        }
+      })()
 
-      const data = await response.json()
+      const data: MessagesResponse = await response.json().catch(() => ({
+        messages: [],
+        count: 0,
+        total_count: 0,
+        limit: PAGE_SIZE,
+        offset,
+        has_more: false,
+      }))
+
+      if (requestId !== requestIdRef.current) return
 
       if (response.ok) {
-        const processedMessages = (data.messages || []).map((message: any) => ({
-          id: message.id || Math.random(),
+        const processedMessages = (data.messages || []).map((message: any, index: number) => ({
+          id: message.id || offset + index + 1,
           wa_id: message.wa_id || "Unknown",
           profile_name: message.profile_name || "Unknown Customer",
           message_type: message.message_type || "text",
           body: message.body || "",
           is_order: message.is_order || false,
           created_at: message.created_at || new Date().toISOString(),
-          direction: message.direction || "inbound",
+          direction: message.direction || (message.message_type === "sent" ? "outbound" : "inbound"),
         }))
 
-        setMessages(processedMessages)
+        setMessages((prev) => (reset ? processedMessages : [...prev, ...processedMessages]))
+        setHasMore(Boolean(data.has_more))
+        setTotalCount(Number(data.total_count || 0))
+        setCurrentPage(page)
         setError(null)
       } else if (response.status === 401) {
         setError("Authentication failed. Please log in again.")
-        // Clear the token from localStorage to force re-authentication
-        localStorage.removeItem("kitchen_token");
-        // Reload the page to redirect to login
-        window.location.reload();
+        localStorage.removeItem("kitchen_token")
+        window.location.reload()
       } else {
-        setError(data.error || "Failed to fetch messages")
+        setError((data as any)?.error || "Failed to fetch messages")
       }
     } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return
       console.error("Fetch messages error:", err)
-      if (err instanceof TypeError && err.message === "Failed to fetch") {
-        setError("Network error - check your connection")
-      } else {
-        setError("An unexpected error occurred")
-      }
+      setError("Network error - check your connection")
     } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (token) {
-      fetchMessages()
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+        setLoadingMore(false)
+      }
+      isFetchingRef.current = false
     }
   }, [token, searchTerm, filterType])
+
+  useEffect(() => {
+    if (!token) return
+
+    setMessages([])
+    setHasMore(false)
+    setCurrentPage(0)
+    setTotalCount(0)
+    setError(null)
+
+    const debounce = setTimeout(() => {
+      void fetchMessagesPage(0, true)
+    }, 250)
+
+    return () => clearTimeout(debounce)
+  }, [token, searchTerm, filterType, fetchMessagesPage])
 
   const formatDate = (dateStr: string) => {
     try {
       return new Date(dateStr).toLocaleString()
-    } catch (error) {
+    } catch {
       return "Invalid Date"
     }
   }
@@ -141,7 +196,7 @@ export function MessagesView({ token }: MessagesViewProps) {
       message.wa_id,
       message.message_type,
       message.direction,
-      message.body.replace(/"/g, '""'), // Escape quotes in message content
+      message.body.replace(/"/g, '""'),
       message.is_order ? "Yes" : "No",
       new Date(message.created_at).toLocaleDateString(),
       new Date(message.created_at).toLocaleTimeString(),
@@ -160,38 +215,41 @@ export function MessagesView({ token }: MessagesViewProps) {
     document.body.removeChild(link)
   }
 
-  // Group messages by customer
-  const groupedMessages = messages.reduce(
-    (groups, message) => {
-      const key = message.wa_id
-      if (!groups[key]) {
-        groups[key] = {
-          customer: {
-            wa_id: message.wa_id,
-            profile_name: message.profile_name,
-          },
-          messages: [],
-          lastMessage: message,
+  const groupedMessages = useMemo(() => {
+    return messages.reduce(
+      (groups, message) => {
+        const key = message.wa_id
+        if (!groups[key]) {
+          groups[key] = {
+            customer: {
+              wa_id: message.wa_id,
+              profile_name: message.profile_name,
+            },
+            messages: [],
+            lastMessage: message,
+          }
         }
-      }
-      groups[key].messages.push(message)
+        groups[key].messages.push(message)
 
-      // Update last message if this one is newer
-      if (new Date(message.created_at) > new Date(groups[key].lastMessage.created_at)) {
-        groups[key].lastMessage = message
-      }
+        if (new Date(message.created_at) > new Date(groups[key].lastMessage.created_at)) {
+          groups[key].lastMessage = message
+        }
 
-      return groups
-    },
-    {} as Record<string, { customer: any; messages: Message[]; lastMessage: Message }>,
-  )
+        return groups
+      },
+      {} as Record<string, { customer: any; messages: Message[]; lastMessage: Message }>,
+    )
+  }, [messages])
 
-  // Convert to array and sort by last message time
-  const conversationList = Object.values(groupedMessages).sort(
-    (a, b) => new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime(),
-  )
+  const conversationList = useMemo(() => {
+    return Object.values(groupedMessages).sort(
+      (a, b) => new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime(),
+    )
+  }, [groupedMessages])
 
-  if (loading) {
+  const loadedCount = messages.length
+
+  if (loading && messages.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -204,25 +262,30 @@ export function MessagesView({ token }: MessagesViewProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-green-600">Message Center</h2>
-          <p className="text-gray-600">{conversationList.length} conversations</p>
+          <p className="text-gray-600">{conversationList.length} conversations loaded</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={exportToCSV} variant="outline" className="flex items-center gap-2 bg-transparent">
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
-          <Button onClick={fetchMessages} variant="outline" className="flex items-center gap-2 bg-transparent">
+          <Button
+            onClick={() => {
+              setMessages([])
+              void fetchMessagesPage(0, true)
+            }}
+            variant="outline"
+            className="flex items-center gap-2 bg-transparent"
+          >
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-4 items-center">
         <div className="flex-1 max-w-md">
           <Input
@@ -253,10 +316,8 @@ export function MessagesView({ token }: MessagesViewProps) {
         </div>
       </div>
 
-      {/* Error Message */}
       {error && <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-red-700">{error}</div>}
 
-      {/* Conversations List */}
       {conversationList.length === 0 && !loading && !error && (
         <div className="text-center py-12">
           <MessageSquare className="h-12 w-12 mx-auto mb-4 text-gray-400" />
@@ -330,6 +391,15 @@ export function MessagesView({ token }: MessagesViewProps) {
           </Card>
         ))}
       </div>
+
+      <LoadMoreButton
+        onClick={() => void fetchMessagesPage(currentPage + 1, false)}
+        loading={loadingMore}
+        hasMore={hasMore}
+        currentCount={loadedCount}
+        totalCount={totalCount || loadedCount}
+        disabled={!!error}
+      />
     </div>
   )
 }
