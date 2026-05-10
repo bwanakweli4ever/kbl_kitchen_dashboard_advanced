@@ -1459,16 +1459,25 @@ ${receiverAddressSection}`;
 
       inboundMessages.sort((a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
 
+      // Prime the watcher on first run so old messages do not create popup noise.
+      if (!hasInitializedMessageWatcherRef.current) {
+        for (const inbound of inboundMessages) {
+          const customerKey = inbound.wa_id;
+          const messageKey = `${inbound.wa_id}-${inbound.created_at}-${inbound.body}`;
+          lastSeenInboundByCustomerRef.current[customerKey] = messageKey;
+        }
+        hasInitializedMessageWatcherRef.current = true;
+        return;
+      }
+
       const customersToNotify: { wa_id: string; profile_name: string; messageKey: string }[] = [];
       for (const inbound of inboundMessages) {
         const customerKey = inbound.wa_id;
         const messageKey = `${inbound.wa_id}-${inbound.created_at}-${inbound.body}`;
         if (lastSeenInboundByCustomerRef.current[customerKey] === messageKey) continue;
-        if (!hasInitializedMessageWatcherRef.current) {
-          lastSeenInboundByCustomerRef.current[customerKey] = messageKey;
-          hasInitializedMessageWatcherRef.current = true;
-          continue;
-        }
+
+        // Record the latest seen message immediately to prevent repeated popups.
+        lastSeenInboundByCustomerRef.current[customerKey] = messageKey;
         customersToNotify.push({ wa_id: customerKey, profile_name: inbound.profile_name || "Customer", messageKey });
       }
 
