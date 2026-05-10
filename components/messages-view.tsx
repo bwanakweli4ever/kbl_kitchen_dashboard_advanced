@@ -45,8 +45,7 @@ const isSupportAlias = (value?: string | null) => {
 }
 
 const fallbackCustomerName = (waId?: string | null) => {
-  const digits = normalizeWaId(waId)
-  return digits ? `Customer ${digits.slice(-4)}` : "Customer"
+  return "Unknown Customer"
 }
 
 export function MessagesView({ token }: MessagesViewProps) {

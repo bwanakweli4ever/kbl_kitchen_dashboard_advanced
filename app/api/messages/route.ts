@@ -12,9 +12,7 @@ function isSupportAlias(value: string | null | undefined) {
 }
 
 function fallbackCustomerName(waId: string | null | undefined) {
-  const digits = (waId || "").replace(/[^\d]/g, "")
-  if (!digits) return "Customer"
-  return `Customer ${digits.slice(-4)}`
+  return "Unknown Customer"
 }
 
 function buildMessageCacheKey(limit: string, offset: string, wa_id: string | null, order_id: string | null, message_type: string | null, is_order: string | null) {
