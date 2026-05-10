@@ -17,7 +17,7 @@ export const config = {
   
   // Dashboard Settings
   dashboard: {
-    pollInterval: 60000, // 1 minute - balanced for responsiveness and server load
+    pollInterval: 120000, // 2 minutes fallback; primary updates come from SSE
     maxOrders: 50,
     autoRefresh: true,
   },

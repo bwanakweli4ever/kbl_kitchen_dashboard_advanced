@@ -57,6 +57,7 @@ import { DeliveryMap, parseCoordinates } from "../components/delivery-map";
 import { OrderDetailModal } from "../components/order-detail-modal";
 import { ChatWidget } from "../components/chat-widget";
 import { reverseGeocode } from "@/lib/reverse-geocode";
+import { useLiveEvents } from "../hooks/use-live-events";
 
 export default function KitchenDashboard() {
   type CouponVerifyState = {
@@ -88,6 +89,8 @@ export default function KitchenDashboard() {
   const [couponVerifyByOrder, setCouponVerifyByOrder] = useState<Record<number, CouponVerifyState>>({});
   const lastSeenInboundByCustomerRef = useRef<Record<string, string>>({});
   const hasInitializedMessageWatcherRef = useRef(false);
+  const lastOrderEventRefreshRef = useRef(0);
+  const lastMessageEventRefreshRef = useRef(0);
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -1372,83 +1375,97 @@ ${receiverAddressSection}`;
     setIsOrderModalOpen(true);
   };
 
+  const checkForIncomingMessages = useCallback(async () => {
+    if (!token || !isAuthenticated) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+
+    try {
+      const response = await fetch("/api/messages?limit=50", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const messages = Array.isArray(data?.messages) ? data.messages : [];
+      const inboundMessages = messages.filter((message: any) => {
+        if (!message?.direction || message.direction !== "inbound") return false;
+        if (!message?.wa_id) return false;
+        if (message?.is_order) return false;
+        if (typeof message.body === "string" && message.body.trim().startsWith("🥪 New order from KBL Bites")) return false;
+        if (message.wa_id === "250792519179") {
+          const lastSeen = lastSeenInboundByCustomerRef.current["250792519179"];
+          const messageKey = `250792519179-${message.created_at}-${message.body}`;
+          if (lastSeen === messageKey) return false;
+          if (typeof message.body === "string" && (message.body.includes("order") || message.body.includes("add-ons"))) return false;
+        }
+        return true;
+      });
+
+      if (inboundMessages.length === 0) return;
+
+      inboundMessages.sort((a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+
+      const customersToNotify: { wa_id: string; profile_name: string; messageKey: string }[] = [];
+      for (const inbound of inboundMessages) {
+        const customerKey = inbound.wa_id;
+        const messageKey = `${inbound.wa_id}-${inbound.created_at}-${inbound.body}`;
+        if (lastSeenInboundByCustomerRef.current[customerKey] === messageKey) continue;
+        if (!hasInitializedMessageWatcherRef.current) {
+          lastSeenInboundByCustomerRef.current[customerKey] = messageKey;
+          hasInitializedMessageWatcherRef.current = true;
+          continue;
+        }
+        customersToNotify.push({ wa_id: customerKey, profile_name: inbound.profile_name || "Customer", messageKey });
+      }
+
+      if (customersToNotify.length > 0 && activeTab !== "messages") {
+        const notify = customersToNotify[customersToNotify.length - 1];
+        notificationSystem.triggerNewMessageNotification(1);
+        setChatWidgetState((prev) => ({
+          open: true,
+          waId: notify.wa_id,
+          customerName: notify.profile_name || prev?.customerName || "Customer",
+          orderId: prev?.waId === notify.wa_id ? prev.orderId : undefined,
+        }));
+      }
+    } catch {
+      console.log("Incoming message watcher skipped due to network error");
+    }
+  }, [token, isAuthenticated, activeTab, notificationSystem.triggerNewMessageNotification]);
+
   useEffect(() => {
     if (!token || !isAuthenticated) return;
 
-    const checkForIncomingMessages = async () => {
-      if (typeof document !== "undefined" && document.hidden) {
-        return;
-      }
-
-      try {
-        const response = await fetch("/api/messages?limit=50", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-        if (!response.ok) return;
-        const data = await response.json();
-        const messages = Array.isArray(data?.messages) ? data.messages : [];
-        const inboundMessages = messages.filter(
-          (message: any) => {
-            if (!message?.direction || message.direction !== "inbound") return false;
-            if (!message?.wa_id) return false;
-            if (message?.is_order) return false;
-            // Exclude order notification messages
-            if (typeof message.body === "string" && message.body.trim().startsWith("🥪 New order from KBL Bites")) return false;
-            // Suppress for user 250792519179 unless a new, non-duplicate chat message
-            if (message.wa_id === "250792519179") {
-              const lastSeen = lastSeenInboundByCustomerRef.current["250792519179"];
-              const messageKey = `250792519179-${message.created_at}-${message.body}`;
-              if (lastSeen === messageKey) return false;
-              // Exclude if message body matches known order notification or is unchanged
-              if (typeof message.body === "string" && (message.body.includes("order") || message.body.includes("add-ons"))) return false;
-            }
-            return true;
-          }
-        );
-        if (inboundMessages.length === 0) return;
-        inboundMessages.sort(
-          (a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime(),
-        );
-        // Only show popup for customers with unseen inbound messages
-        // Batch notifications: only one per customer per poll, and only if chat not open
-        const customersToNotify: { wa_id: string; profile_name: string; messageKey: string }[] = [];
-        for (const inbound of inboundMessages) {
-          const customerKey = inbound.wa_id;
-          const messageKey = `${inbound.wa_id}-${inbound.created_at}-${inbound.body}`;
-          // Only suppress duplicate notifications for same message
-          if (lastSeenInboundByCustomerRef.current[customerKey] === messageKey) continue;
-          if (!hasInitializedMessageWatcherRef.current) {
-            lastSeenInboundByCustomerRef.current[customerKey] = messageKey;
-            hasInitializedMessageWatcherRef.current = true;
-            continue;
-          }
-          customersToNotify.push({ wa_id: customerKey, profile_name: inbound.profile_name || "Customer", messageKey });
-        }
-        if (customersToNotify.length > 0 && activeTab !== "messages") {
-          // Only notify for the most recent new customer/message in this poll
-          const notify = customersToNotify[customersToNotify.length - 1];
-          console.log("[Chat Popup] Triggering floating widget for inbound message:", notify);
-          notificationSystem.triggerNewMessageNotification(1);
-          setChatWidgetState((prev) => ({
-            open: true,
-            waId: notify.wa_id,
-            customerName: notify.profile_name || prev?.customerName || "Customer",
-            orderId: prev?.waId === notify.wa_id ? prev.orderId : undefined,
-          }));
-        }
-      } catch (error) {
-        console.log("Incoming message watcher skipped due to network error");
-      }
-    };
     checkForIncomingMessages();
     const interval = setInterval(checkForIncomingMessages, 30000);
     return () => {
       clearInterval(interval);
     };
-  }, [token, isAuthenticated, activeTab, chatWidgetState, notificationSystem.triggerNewMessageNotification]);
+  }, [token, isAuthenticated, checkForIncomingMessages]);
+
+  const handleOrderChangedEvent = useCallback(() => {
+    const now = Date.now();
+    if (now - lastOrderEventRefreshRef.current < 2000) return;
+    lastOrderEventRefreshRef.current = now;
+    void refreshOrders(true);
+  }, [refreshOrders]);
+
+  const handleMessageChangedEvent = useCallback(() => {
+    const now = Date.now();
+    if (now - lastMessageEventRefreshRef.current < 3000) return;
+    lastMessageEventRefreshRef.current = now;
+    void checkForIncomingMessages();
+  }, [checkForIncomingMessages]);
+
+  const { isConnected: isLiveEventsConnected } = useLiveEvents({
+    token,
+    isActive: isAuthenticated,
+    onOrderChanged: handleOrderChangedEvent,
+    onMessageChanged: handleMessageChangedEvent,
+  });
 
 
   if (!isAuthenticated) {
@@ -1573,7 +1590,7 @@ ${receiverAddressSection}`;
             <div className="flex flex-col xs:flex-row xs:items-center gap-1 xs:gap-2 sm:gap-4">
               <p className="text-gray-600 text-xs sm:text-sm md:text-base">{orders.length} active orders</p>
               <div className="flex items-center gap-2">
-                <RealTimeIndicator isConnected={true} lastUpdate={lastFetch || new Date()} isPolling={isPolling} />
+                <RealTimeIndicator isConnected={isLiveEventsConnected || isPolling} lastUpdate={lastFetch || new Date()} isPolling={isPolling} />
                 <Button
                   onClick={handleManualRefresh}
                   variant="outline"
