@@ -101,7 +101,8 @@ export async function GET(request: NextRequest) {
     if (!wa_id) {
       summaryConversationFetchAttempted = true
       const convoController = new AbortController()
-      const convoTimeoutId = setTimeout(() => convoController.abort(), config.api.timeout)
+      // Use a longer timeout for conversation summary — this endpoint aggregates across all messages
+      const convoTimeoutId = setTimeout(() => convoController.abort(), Math.max(config.api.timeout, 25000))
       try {
         const convoResponse = await fetch(`${API_BASE_URL}/api/chat/conversations`, {
           headers: {
@@ -136,7 +137,10 @@ export async function GET(request: NextRequest) {
         console.warn("⚠️ Conversation summary fetch error, falling back to legacy messages endpoint")
       }
 
-      if (summaryOnly && appChatMessages.length > 0) {
+      if (summaryOnly) {
+        // For summary view, always return from conversation endpoint (success or empty).
+        // Never fall through to the legacy /messages/ endpoint — it is a per-message
+        // endpoint that is slow and unrelated to conversation summaries.
         const summaryData = {
           messages: appChatMessages,
           count: appChatMessages.length,
@@ -146,12 +150,11 @@ export async function GET(request: NextRequest) {
           has_more: false,
           source: "conversation_summary",
         }
-        messageResponseCache.set(cacheKey, { data: summaryData, at: Date.now() })
+        if (summaryConversationFetchSucceeded) {
+          // Cache successful responses
+          messageResponseCache.set(cacheKey, { data: summaryData, at: Date.now() })
+        }
         return NextResponse.json(summaryData)
-      }
-
-      if (summaryOnly && summaryConversationFetchAttempted && !summaryConversationFetchSucceeded) {
-        console.warn("⚠️ Using legacy messages fallback for summary view")
       }
     }
 
