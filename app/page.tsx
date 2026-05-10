@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -56,6 +56,7 @@ import { RealTimeIndicator } from "../components/real-time-indicator";
 import { DeliveryMap, parseCoordinates } from "../components/delivery-map";
 import { OrderDetailModal } from "../components/order-detail-modal";
 import { ChatWidget } from "../components/chat-widget";
+import { LoadMoreButton } from "../components/pagination/load-more";
 import { reverseGeocode } from "@/lib/reverse-geocode";
 import { useLiveEvents } from "../hooks/use-live-events";
 
@@ -70,6 +71,7 @@ export default function KitchenDashboard() {
 
   const COUPON_VERIFY_CACHE_MS = 5 * 60 * 1000;
   const COUPON_VERIFY_COOLDOWN_MS = 60 * 1000;
+  const ORDERS_VISIBLE_PAGE_SIZE = 10;
 
   const [apiKey, setApiKey] = useState("");
   const [token, setToken] = useState<string | null>(null);
@@ -86,6 +88,7 @@ export default function KitchenDashboard() {
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [chatWidgetState, setChatWidgetState] = useState<{ open: boolean; waId: string; customerName: string; orderId?: number } | null>(null);
+  const [visibleOrderCount, setVisibleOrderCount] = useState(ORDERS_VISIBLE_PAGE_SIZE);
   const [couponVerifyByOrder, setCouponVerifyByOrder] = useState<Record<number, CouponVerifyState>>({});
   const lastSeenInboundByCustomerRef = useRef<Record<string, string>>({});
   const hasInitializedMessageWatcherRef = useRef(false);
@@ -180,6 +183,18 @@ export default function KitchenDashboard() {
     }, [triggerNewOrderNotification]),
     onOrderUpdate: useCallback(() => {}, [])
   });
+
+  const visibleOrders = useMemo(() => {
+    return orders.slice(0, visibleOrderCount);
+  }, [orders, visibleOrderCount]);
+
+  useEffect(() => {
+    setVisibleOrderCount((prev) => {
+      if (orders.length === 0) return ORDERS_VISIBLE_PAGE_SIZE;
+      if (prev < ORDERS_VISIBLE_PAGE_SIZE) return ORDERS_VISIBLE_PAGE_SIZE;
+      return Math.min(prev, orders.length);
+    });
+  }, [orders.length]);
 
   // Refresh orders after status update (with debouncing)
   const handleOrderStatusUpdated = useCallback(async (forceRefresh = false) => {
@@ -1775,7 +1790,7 @@ ${receiverAddressSection}`;
               {/* Orders Count */}
               <div className="flex items-center justify-center mb-2 sm:mb-3 md:mb-4">
                 <div className="text-xs sm:text-sm text-gray-600 text-center px-3 py-2 bg-white/80 backdrop-blur-sm rounded-lg shadow-sm flex items-center gap-2">
-                  <span>{orders.length} active orders</span>
+                  <span>{Math.min(visibleOrders.length, orders.length)} of {orders.length} active orders</span>
                   {isPolling && (
                     <RefreshCw className="h-3 w-3 animate-spin text-green-500" />
                   )}
@@ -1784,7 +1799,7 @@ ${receiverAddressSection}`;
 
               {/* Responsive Grid Display */}
               <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
-                {orders.map((order, index) => {
+                {visibleOrders.map((order, index) => {
                   const spiceLevel = getSpiceLevel(order.spice_level);
                   const animationDelay = index * 0.1; // Stagger the animations
 
@@ -2612,6 +2627,15 @@ ${receiverAddressSection}`;
                   );
                 })}
               </div>
+
+              <LoadMoreButton
+                onClick={() => setVisibleOrderCount((current) => current + ORDERS_VISIBLE_PAGE_SIZE)}
+                loading={false}
+                hasMore={visibleOrderCount < orders.length}
+                currentCount={Math.min(visibleOrders.length, orders.length)}
+                totalCount={orders.length}
+                disabled={!!error}
+              />
             </div>
           )}
         </TabsContent>

@@ -33,14 +33,14 @@ export function CustomersTableView({ token }: CustomersTableViewProps) {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [filterBy, setFilterBy] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage] = useState(20)
+  const [itemsPerPage] = useState(10)
 
   const fetchCustomers = async () => {
     try {
       setLoading(true)
       if (!token) return
 
-      const response = await fetch("/api/customers?limit=1000", {
+      const response = await fetch("/api/customers?limit=200", {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
