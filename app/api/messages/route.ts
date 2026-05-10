@@ -3,6 +3,7 @@ import { config } from "@/lib/config"
 
 const API_BASE_URL = process.env.WHATSAPP_API_URL || config.api.baseUrl
 const MESSAGE_CACHE_TTL_MS = 2 * 60 * 1000
+const MESSAGE_NAME_RESOLUTION_VERSION = "v2"
 const messageResponseCache = new Map<string, { data: any; at: number }>()
 
 function isSupportAlias(value: string | null | undefined) {
@@ -20,8 +21,14 @@ function isWeakCustomerName(value: string | null | undefined) {
   return !normalized || normalized === "unknown customer" || normalized === "customer" || isSupportAlias(normalized)
 }
 
+function resolveCustomerName(profileName: string | null | undefined, userName: string | null | undefined, waId: string | null | undefined) {
+  if (!isWeakCustomerName(profileName)) return (profileName || "").trim()
+  if (!isWeakCustomerName(userName)) return (userName || "").trim()
+  return fallbackCustomerName(waId)
+}
+
 function buildMessageCacheKey(limit: string, offset: string, wa_id: string | null, order_id: string | null, message_type: string | null, is_order: string | null) {
-  return [limit, offset, wa_id || '', order_id || '', message_type || '', is_order || ''].join('|')
+  return [MESSAGE_NAME_RESOLUTION_VERSION, limit, offset, wa_id || '', order_id || '', message_type || '', is_order || ''].join('|')
 }
 
 export async function GET(request: NextRequest) {
@@ -82,9 +89,7 @@ export async function GET(request: NextRequest) {
             appChatMessages = chatMessages.map((m: any) => ({
               id: m.id,
               wa_id: m.user_id,
-              profile_name: isSupportAlias(m.user_name || m.profile_name)
-                ? fallbackCustomerName(m.user_id)
-                : (m.profile_name || m.user_name || fallbackCustomerName(m.user_id)),
+              profile_name: resolveCustomerName(m.profile_name, m.user_name, m.user_id),
               message_type: m.message_type || "text",
               body: m.message || "",
               is_order: m.order_id != null,
@@ -118,9 +123,7 @@ export async function GET(request: NextRequest) {
             appChatMessages = conversations.map((c: any, index: number) => ({
               id: c.id ?? index + 1,
               wa_id: c.user_id,
-              profile_name: isSupportAlias(c.user_name || c.profile_name)
-                ? fallbackCustomerName(c.user_id)
-                : (c.profile_name || c.user_name || fallbackCustomerName(c.user_id)),
+              profile_name: resolveCustomerName(c.profile_name, c.user_name, c.user_id),
               message_type: "text",
               body: c.message || "",
               is_order: false,
