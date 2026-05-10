@@ -134,8 +134,28 @@ export default function KitchenDashboard() {
   // Register service worker for PWA functionality
   useEffect(() => {
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+      let hasReloadedForNewWorker = false;
+
       navigator.serviceWorker.register('/sw.js')
         .then((registration) => {
+          registration.update().catch(() => undefined);
+
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (!newWorker) return;
+
+            newWorker.addEventListener('statechange', () => {
+              if (
+                newWorker.state === 'activated' &&
+                navigator.serviceWorker.controller &&
+                !hasReloadedForNewWorker
+              ) {
+                hasReloadedForNewWorker = true;
+                window.location.reload();
+              }
+            });
+          });
+
           console.log('SW registered: ', registration);
         })
         .catch((registrationError) => {

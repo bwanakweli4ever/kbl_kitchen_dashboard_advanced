@@ -1,7 +1,6 @@
 // Service Worker for KBL Kitchen Dashboard PWA
-const CACHE_NAME = 'kbl-kitchen-v1';
+const CACHE_NAME = 'kbl-kitchen-v2';
 const urlsToCache = [
-  '/',
   '/manifest.json',
   '/favicon.ico',
   '/favicon-16x16.png',
@@ -13,6 +12,7 @@ const urlsToCache = [
 
 // Install event - cache resources
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -21,14 +21,43 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Fetch event - serve from cache when offline
+// Fetch event - keep HTML and Next assets network-first to avoid stale chunk URLs after deploys
 self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const requestUrl = new URL(request.url);
+
+  if (request.method !== 'GET') {
+    return;
+  }
+
+  const isNavigationRequest = request.mode === 'navigate';
+  const isNextAsset = requestUrl.pathname.startsWith('/_next/');
+  const isApiRequest = requestUrl.pathname.startsWith('/api/');
+
+  if (isNavigationRequest || isNextAsset || isApiRequest) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
-      })
+    caches.match(request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      return fetch(request).then((networkResponse) => {
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
+
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, responseToCache);
+        });
+
+        return networkResponse;
+      });
+    })
   );
 });
 
@@ -36,13 +65,14 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
+      return Promise.all([
+        ...cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
             return caches.delete(cacheName);
           }
-        })
-      );
+        }),
+        self.clients.claim(),
+      ]);
     })
   );
 });
