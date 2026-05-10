@@ -44,6 +44,11 @@ const isSupportAlias = (value?: string | null) => {
   return ["kitchen support", "support", "customer support", "admin", "agent"].includes(normalized)
 }
 
+const isWeakCustomerName = (value?: string | null) => {
+  const normalized = (value || "").trim().toLowerCase()
+  return !normalized || normalized === "unknown customer" || normalized === "customer" || isSupportAlias(normalized)
+}
+
 const fallbackCustomerName = (waId?: string | null) => {
   return "Unknown Customer"
 }
@@ -314,7 +319,7 @@ export function MessagesView({ token }: MessagesViewProps) {
           }
         }
 
-        if (isSupportAlias(groups[key].customer.profile_name) && !isSupportAlias(message.profile_name)) {
+        if (isWeakCustomerName(groups[key].customer.profile_name) && !isWeakCustomerName(message.profile_name)) {
           groups[key].customer.profile_name = message.profile_name
         }
 

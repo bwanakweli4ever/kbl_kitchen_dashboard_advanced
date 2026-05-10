@@ -77,7 +77,9 @@ export async function GET(request: NextRequest) {
             appChatMessages = chatMessages.map((m: any) => ({
               id: m.id,
               wa_id: m.user_id,
-              profile_name: isSupportAlias(m.user_name) ? fallbackCustomerName(m.user_id) : (m.user_name || fallbackCustomerName(m.user_id)),
+              profile_name: isSupportAlias(m.user_name || m.profile_name)
+                ? fallbackCustomerName(m.user_id)
+                : (m.profile_name || m.user_name || fallbackCustomerName(m.user_id)),
               message_type: m.message_type || "text",
               body: m.message || "",
               is_order: m.order_id != null,
@@ -110,7 +112,9 @@ export async function GET(request: NextRequest) {
             appChatMessages = conversations.map((c: any, index: number) => ({
               id: c.id ?? index + 1,
               wa_id: c.user_id,
-              profile_name: isSupportAlias(c.user_name) ? fallbackCustomerName(c.user_id) : (c.user_name || fallbackCustomerName(c.user_id)),
+              profile_name: isSupportAlias(c.user_name || c.profile_name)
+                ? fallbackCustomerName(c.user_id)
+                : (c.profile_name || c.user_name || fallbackCustomerName(c.user_id)),
               message_type: "text",
               body: c.message || "",
               is_order: false,
