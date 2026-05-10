@@ -36,6 +36,19 @@ interface MessagesResponse {
 
 const PAGE_SIZE = 10
 
+const normalizeWaId = (value?: string | null) => (value || "").replace(/[^\d]/g, "")
+
+const isSupportAlias = (value?: string | null) => {
+  const normalized = (value || "").trim().toLowerCase()
+  if (!normalized) return false
+  return ["kitchen support", "support", "customer support", "admin", "agent"].includes(normalized)
+}
+
+const fallbackCustomerName = (waId?: string | null) => {
+  const digits = normalizeWaId(waId)
+  return digits ? `Customer ${digits.slice(-4)}` : "Customer"
+}
+
 export function MessagesView({ token }: MessagesViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
@@ -47,9 +60,66 @@ export function MessagesView({ token }: MessagesViewProps) {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState<string>("all")
+  const [customerNameByWaId, setCustomerNameByWaId] = useState<Record<string, string>>({})
 
   const isFetchingRef = useRef(false)
   const requestIdRef = useRef(0)
+
+  const resolveProfileName = useCallback(
+    (rawMessage: Record<string, any>) => {
+      const waId = String(rawMessage.wa_id || rawMessage.user_id || "")
+      const normalizedWaId = normalizeWaId(waId)
+      const mappedCustomerName = normalizedWaId ? customerNameByWaId[normalizedWaId] : undefined
+      const candidateNames = [
+        rawMessage.profile_name,
+        rawMessage.user_name,
+        rawMessage.customer_name,
+        mappedCustomerName,
+      ]
+
+      const preferredName = candidateNames.find((name) => {
+        const trimmed = (name || "").trim()
+        return trimmed.length > 0 && !isSupportAlias(trimmed)
+      })
+
+      return preferredName || mappedCustomerName || fallbackCustomerName(waId)
+    },
+    [customerNameByWaId],
+  )
+
+  useEffect(() => {
+    if (!token) return
+
+    const fetchCustomerNames = async () => {
+      try {
+        const response = await fetch(`/api/customers?limit=500&offset=0`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (!response.ok) return
+        const data = await response.json()
+        const customers = Array.isArray(data?.customers) ? data.customers : []
+
+        const mapping = customers.reduce((acc: Record<string, string>, customer: Record<string, any>) => {
+          const waId = normalizeWaId(String(customer.wa_id || customer.raw_wa_id || ""))
+          const name = String(customer.profile_name || "").trim()
+          if (waId && name && !isSupportAlias(name)) {
+            acc[waId] = name
+          }
+          return acc
+        }, {})
+
+        setCustomerNameByWaId(mapping)
+      } catch {
+        // Non-blocking: message view still works without customer map.
+      }
+    }
+
+    void fetchCustomerNames()
+  }, [token])
 
   const fetchMessagesPage = useCallback(async (page: number, reset = false) => {
     if (!token || isFetchingRef.current) return
@@ -69,7 +139,8 @@ export function MessagesView({ token }: MessagesViewProps) {
       const params = new URLSearchParams()
       params.append("limit", String(PAGE_SIZE))
       params.append("offset", String(offset))
-      if (searchTerm.trim()) params.append("wa_id", searchTerm.trim())
+      const normalizedSearchWaId = normalizeWaId(searchTerm)
+      if (normalizedSearchWaId.length >= 6) params.append("wa_id", normalizedSearchWaId)
       if (filterType !== "all") params.append("message_type", filterType)
 
       const controller = new AbortController()
@@ -105,7 +176,7 @@ export function MessagesView({ token }: MessagesViewProps) {
         const processedMessages = (data.messages || []).map((message: any, index: number) => ({
           id: message.id || offset + index + 1,
           wa_id: message.wa_id || "Unknown",
-          profile_name: message.profile_name || "Unknown Customer",
+          profile_name: resolveProfileName(message),
           message_type: message.message_type || "text",
           body: message.body || "",
           is_order: message.is_order || false,
@@ -113,7 +184,19 @@ export function MessagesView({ token }: MessagesViewProps) {
           direction: message.direction || (message.message_type === "sent" ? "outbound" : "inbound"),
         }))
 
-        setMessages((prev) => (reset ? processedMessages : [...prev, ...processedMessages]))
+        processedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+        setMessages((prev) => {
+          const merged = reset ? processedMessages : [...prev, ...processedMessages]
+          const deduped = new Map<string, Message>()
+          for (const message of merged) {
+            const key = `${message.id}-${message.wa_id}-${message.created_at}-${message.direction}-${message.body}`
+            deduped.set(key, message)
+          }
+          return Array.from(deduped.values()).sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          )
+        })
         setHasMore(Boolean(data.has_more))
         setTotalCount(Number(data.total_count || 0))
         setCurrentPage(page)
@@ -136,7 +219,7 @@ export function MessagesView({ token }: MessagesViewProps) {
       }
       isFetchingRef.current = false
     }
-  }, [token, searchTerm, filterType])
+  }, [token, searchTerm, filterType, resolveProfileName])
 
   useEffect(() => {
     if (!token) return
@@ -231,6 +314,11 @@ export function MessagesView({ token }: MessagesViewProps) {
             lastMessage: message,
           }
         }
+
+        if (isSupportAlias(groups[key].customer.profile_name) && !isSupportAlias(message.profile_name)) {
+          groups[key].customer.profile_name = message.profile_name
+        }
+
         groups[key].messages.push(message)
 
         if (new Date(message.created_at) > new Date(groups[key].lastMessage.created_at)) {
@@ -244,10 +332,24 @@ export function MessagesView({ token }: MessagesViewProps) {
   }, [messages])
 
   const conversationList = useMemo(() => {
-    return Object.values(groupedMessages).sort(
+    const baseList = Object.values(groupedMessages).sort(
       (a, b) => new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime(),
     )
-  }, [groupedMessages])
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+    if (!normalizedSearch) return baseList
+    const normalizedSearchDigits = normalizeWaId(searchTerm)
+    return baseList.filter((conversation) => {
+      const name = (conversation.customer.profile_name || "").toLowerCase()
+      const wa = normalizeWaId(conversation.customer.wa_id)
+      const waRaw = (conversation.customer.wa_id || "").toLowerCase()
+
+      return (
+        name.includes(normalizedSearch) ||
+        waRaw.includes(normalizedSearch) ||
+        (normalizedSearchDigits ? wa.includes(normalizedSearchDigits) : false)
+      )
+    })
+  }, [groupedMessages, searchTerm])
 
   useEffect(() => {
     setVisibleConversationCount(PAGE_SIZE)
@@ -299,7 +401,7 @@ export function MessagesView({ token }: MessagesViewProps) {
       <div className="flex gap-4 items-center">
         <div className="flex-1 max-w-md">
           <Input
-            placeholder="Search by phone number..."
+            placeholder="Search by customer name or phone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full"

@@ -5,6 +5,18 @@ const API_BASE_URL = process.env.WHATSAPP_API_URL || config.api.baseUrl
 const MESSAGE_CACHE_TTL_MS = 2 * 60 * 1000
 const messageResponseCache = new Map<string, { data: any; at: number }>()
 
+function isSupportAlias(value: string | null | undefined) {
+  const normalized = (value || "").trim().toLowerCase()
+  if (!normalized) return false
+  return ["kitchen support", "support", "customer support", "admin", "agent"].includes(normalized)
+}
+
+function fallbackCustomerName(waId: string | null | undefined) {
+  const digits = (waId || "").replace(/[^\d]/g, "")
+  if (!digits) return "Customer"
+  return `Customer ${digits.slice(-4)}`
+}
+
 function buildMessageCacheKey(limit: string, offset: string, wa_id: string | null, order_id: string | null, message_type: string | null, is_order: string | null) {
   return [limit, offset, wa_id || '', order_id || '', message_type || '', is_order || ''].join('|')
 }
@@ -65,7 +77,7 @@ export async function GET(request: NextRequest) {
             appChatMessages = chatMessages.map((m: any) => ({
               id: m.id,
               wa_id: m.user_id,
-              profile_name: m.user_name || "Customer",
+              profile_name: isSupportAlias(m.user_name) ? fallbackCustomerName(m.user_id) : (m.user_name || fallbackCustomerName(m.user_id)),
               message_type: m.message_type || "text",
               body: m.message || "",
               is_order: m.order_id != null,
@@ -97,7 +109,7 @@ export async function GET(request: NextRequest) {
             appChatMessages = conversations.map((c: any, index: number) => ({
               id: c.id ?? index + 1,
               wa_id: c.user_id,
-              profile_name: c.user_name || "Customer",
+              profile_name: isSupportAlias(c.user_name) ? fallbackCustomerName(c.user_id) : (c.user_name || fallbackCustomerName(c.user_id)),
               message_type: "text",
               body: c.message || "",
               is_order: false,
@@ -257,7 +269,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authorization.replace("Bearer ", "")
-    const { phone_number, message, order_id } = await request.json()
+    const { phone_number, customer_name, message, order_id } = await request.json()
 
     if (!phone_number || !message) {
       return NextResponse.json({ error: "Phone number and message are required" }, { status: 400 })
@@ -279,7 +291,7 @@ export async function POST(request: NextRequest) {
           },
           body: JSON.stringify({
             user_id: phone_number,
-            user_name: "Kitchen Support",
+            user_name: customer_name || null,
             message,
             message_type: "text",
             order_id: order_id ?? null,

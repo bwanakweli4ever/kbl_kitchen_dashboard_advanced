@@ -258,6 +258,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
         },
         body: JSON.stringify({
           phone_number: phoneNumber,
+          customer_name: customerName,
           message: newMessage.trim(),
           order_id: null,
         }),
@@ -297,7 +298,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
     }
   }
 
-  // Auto-refresh messages every 5 seconds (even when closed) to detect incoming messages
+  // Keep local state in sync with current conversation.
   useEffect(() => {
     if (!token || !phoneNumber) return
 
@@ -311,13 +312,19 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
     lastInboundMessageKeyRef.current = null
     setLastInboundMessageKey(null)
 
-    fetchMessages() // Initial fetch
+  }, [token, phoneNumber, orderId])
+
+  // Poll only when the widget is open, preventing background noise across many rows.
+  useEffect(() => {
+    if (!token || !phoneNumber || !open) return
+
+    fetchMessages()
     const interval = setInterval(() => {
       fetchMessages()
-    }, 5000) // Refresh every 5 seconds
+    }, 5000)
 
     return () => clearInterval(interval)
-  }, [token, phoneNumber, orderId])
+  }, [token, phoneNumber, open])
 
   const handleOpenChange = (newOpen: boolean) => {
     console.log("Chat widget open change:", newOpen)
