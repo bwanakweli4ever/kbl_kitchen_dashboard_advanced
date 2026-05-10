@@ -18,7 +18,9 @@ export const config = {
   // Dashboard Settings
   dashboard: {
     pollInterval: 120000, // 2 minutes fallback; primary updates come from SSE
-    maxOrders: 50,
+    maxOrders: 20,
+    pageSize: 20, // Page size for paginated queries
+    messageCacheMs: 5 * 60 * 1000, // 5 minute cache for messages
     autoRefresh: true,
   },
   
