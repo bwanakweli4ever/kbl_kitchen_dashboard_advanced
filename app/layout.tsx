@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import ErrorBoundary from '../components/error-boundary'
 import { FcmProvider } from '../components/fcm-provider'
+import { ChunkReloadGuard } from '../components/chunk-reload-guard'
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -46,6 +47,7 @@ export default function RootLayout({
     <html lang="en">
       <body suppressHydrationWarning={true}>
         <ErrorBoundary>
+          <ChunkReloadGuard />
           <FcmProvider />
           {children}
         </ErrorBoundary>
