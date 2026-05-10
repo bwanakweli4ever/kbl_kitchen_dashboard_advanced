@@ -48,6 +48,8 @@ export async function GET(request: NextRequest) {
     }
 
     let appChatMessages: any[] = []
+    let summaryConversationFetchAttempted = false
+    let summaryConversationFetchSucceeded = false
     const normalizeWaId = (value: string | null | undefined) => (value || "").replace(/[^\d]/g, "")
     const requestedWaIdNormalized = normalizeWaId(wa_id)
 
@@ -92,6 +94,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!wa_id) {
+      summaryConversationFetchAttempted = true
       const convoController = new AbortController()
       const convoTimeoutId = setTimeout(() => convoController.abort(), config.api.timeout)
       try {
@@ -116,13 +119,17 @@ export async function GET(request: NextRequest) {
               created_at: c.created_at || new Date().toISOString(),
               direction: "inbound",
             }))
+            summaryConversationFetchSucceeded = true
           }
+        } else {
+          console.warn("⚠️ Conversation summary fetch failed:", convoResponse.status)
         }
       } catch (e) {
         clearTimeout(convoTimeoutId)
+        console.warn("⚠️ Conversation summary fetch error, falling back to legacy messages endpoint")
       }
 
-      if (summaryOnly) {
+      if (summaryOnly && appChatMessages.length > 0) {
         const summaryData = {
           messages: appChatMessages,
           count: appChatMessages.length,
@@ -134,6 +141,10 @@ export async function GET(request: NextRequest) {
         }
         messageResponseCache.set(cacheKey, { data: summaryData, at: Date.now() })
         return NextResponse.json(summaryData)
+      }
+
+      if (summaryOnly && summaryConversationFetchAttempted && !summaryConversationFetchSucceeded) {
+        console.warn("⚠️ Using legacy messages fallback for summary view")
       }
     }
 
