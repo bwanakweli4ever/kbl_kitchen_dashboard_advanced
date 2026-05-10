@@ -21,9 +21,10 @@ export async function GET(request: NextRequest) {
       }, { status: 401 })
     }
     
-    // Add timeout and better error handling
+    // Short timeout — we only need to detect a 401, not wait for full data
+    const PING_TIMEOUT_MS = 5000
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), config.api.timeout)
+    const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT_MS)
     
     try {
       // Make an authenticated request to test the token
@@ -53,23 +54,25 @@ export async function GET(request: NextRequest) {
           message: "Token is invalid or expired"
         }, { status: 401 })
       } else {
+        // Any non-auth error means backend is reachable; treat as success
         return NextResponse.json({
-          success: false,
+          success: true,
           status: response.status,
           backendUrl: config.api.baseUrl,
-          message: `Backend responded with status ${response.status}`
-        }, { status: response.status })
+          message: `Backend reachable (status ${response.status})`
+        })
       }
     } catch (fetchError) {
       clearTimeout(timeoutId)
       
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        // Backend is slow but not explicitly rejecting — keep session alive
         return NextResponse.json({
-          success: false,
-          error: "Request timeout",
+          success: true,
+          error: "slow_backend",
           backendUrl: config.api.baseUrl,
-          message: `Backend did not respond within ${config.api.timeout}ms`
-        }, { status: 408 })
+          message: "Backend is slow but session kept alive"
+        })
       }
       
       throw fetchError // Re-throw to be caught by outer catch
