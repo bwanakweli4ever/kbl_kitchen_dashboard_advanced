@@ -17,6 +17,13 @@ import {
   TabsTrigger
 } from "@/components/ui/tabs";
 import {
+  Menu,
+  MapPin,
+  Bell,
+  Plus,
+  UserCircle2,
+  ClipboardList,
+  Archive,
   Clock,
   User,
   Phone,
@@ -34,6 +41,7 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Copy,
   ZoomIn,
   Truck,
@@ -1604,89 +1612,75 @@ ${receiverAddressSection}`;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 p-1 sm:p-2 md:p-4">
+    <div className="min-h-screen bg-[#f5f7fb] p-2 sm:p-3 md:p-4">
       {/* Header */}
-      <div className="mb-2 sm:mb-3 md:mb-4 lg:mb-6">
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 xl:gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 sm:gap-4 mb-2 sm:mb-3">
-              {/* KBL Bites Logo */}
-              <div className="flex items-center gap-2 sm:gap-3">
-                <img 
-                  src="/logo.png" 
-                  alt="KBL Bites Logo" 
-                  className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 object-contain"
+      <div className="mb-3 sm:mb-4 md:mb-5">
+        <div className="rounded-2xl border border-gray-200 bg-white px-3 sm:px-5 py-3 sm:py-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 sm:gap-5 min-w-0">
+              <button className="h-9 w-9 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 inline-flex items-center justify-center">
+                <Menu className="h-5 w-5" />
+              </button>
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <img
+                  src="/logo.png"
+                  alt="KBL Bites Logo"
+                  className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
                 />
-                <div className="flex flex-col">
-                  <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-green-600 leading-tight">
-                    <span className="text-green-600">KBL</span> <span className="text-green-600">Bites</span>
-                    <span className="text-orange-500 text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl ml-1">•</span>
-                  </h1>
-                  <p className="text-gray-500 text-xs sm:text-sm font-medium uppercase tracking-wider">QUICK • FRESH • SATISFYING</p>
+                <div className="min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-green-600 leading-tight truncate">KBL Bites</h1>
+                  <p className="text-[10px] sm:text-xs text-gray-500 font-semibold tracking-wide uppercase truncate">QUICK • FRESH • SATISFYING</p>
                 </div>
               </div>
             </div>
-            <div className="flex flex-col xs:flex-row xs:items-center gap-1 xs:gap-2 sm:gap-4">
-              <p className="text-gray-600 text-xs sm:text-sm md:text-base">{orders.length} active orders</p>
-              <div className="flex items-center gap-2">
-                <RealTimeIndicator isConnected={isLiveEventsConnected || isPolling} lastUpdate={lastFetch || new Date()} isPolling={isPolling} />
-                <Button
-                  onClick={handleManualRefresh}
-                  variant="outline"
-                  size="sm"
-                  className={`flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2 h-7 sm:h-8 transition-all duration-200 ${
-                    refreshSuccess 
-                      ? 'text-green-600 bg-green-50 border-green-300' 
-                      : 'text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200'
-                  }`}
-                  disabled={isPolling}
-                >
-                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${isPolling ? 'animate-spin' : ''}`} />
-                  <span className="hidden xs:inline">
-                    {refreshSuccess ? 'Refreshed!' : 'Refresh'}
-                  </span>
-                </Button>
-                {notificationSystem.hasPermission && (
-                  <Button
-                    onClick={() => notificationSystem.triggerNewOrderNotification(1)}
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2 h-7 sm:h-8"
-                  >
-                    <span className="text-sm">🔔</span>
-                    <span className="hidden xs:inline">Test</span>
-                  </Button>
-                )}
+
+            <div className="hidden md:flex items-center gap-3 lg:gap-5">
+              <button className="h-10 px-4 rounded-xl border border-gray-200 bg-white inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <MapPin className="h-4 w-4 text-gray-500" />
+                <span>Main Branch</span>
+                <ChevronDown className="h-4 w-4 text-gray-500" />
+              </button>
+              <div className="h-10 px-4 rounded-xl bg-green-50 text-green-700 inline-flex items-center gap-2 text-sm font-semibold border border-green-100">
+                <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                <span>Online</span>
               </div>
             </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button className="relative h-10 w-10 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 inline-flex items-center justify-center">
+                <Bell className="h-5 w-5" />
+                <span className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">{notificationSystem.notifications.newOrders + notificationSystem.notifications.newMessages}</span>
+              </button>
+              <button className="hidden sm:inline-flex h-10 px-4 rounded-xl bg-green-600 text-white font-semibold items-center gap-2 hover:bg-green-700">
+                <Plus className="h-4 w-4" />
+                <span>New Order</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="h-10 w-10 sm:w-auto sm:px-3 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 inline-flex items-center justify-center gap-2"
+                title="Logout"
+              >
+                <UserCircle2 className="h-5 w-5" />
+                <span className="hidden sm:inline text-sm font-semibold">Manager</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1 sm:gap-2 md:gap-4 flex-shrink-0">
-            {!notificationSystem.hasPermission && (
+
+          <div className="mt-3 flex items-center justify-between gap-2 text-xs sm:text-sm text-gray-500">
+            <span>{orders.length} active orders</span>
+            <div className="flex items-center gap-2">
+              <RealTimeIndicator isConnected={isLiveEventsConnected || isPolling} lastUpdate={lastFetch || new Date()} isPolling={isPolling} />
               <Button
-                onClick={notificationSystem.requestNotificationPermission}
+                onClick={handleManualRefresh}
                 variant="outline"
                 size="sm"
-                className="flex items-center gap-1 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2 h-7 sm:h-8"
+                className="h-8 border-green-200 text-green-700 hover:bg-green-50"
+                disabled={isPolling}
               >
-                <span className="text-sm">🔔</span>
-                <span className="hidden xs:inline">Enable Notifications</span>
+                <RefreshCw className={`h-3.5 w-3.5 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
+                {refreshSuccess ? 'Refreshed' : 'Refresh'}
               </Button>
-            )}
-            <NotificationCenter
-              newOrders={notificationSystem.notifications.newOrders}
-              newMessages={notificationSystem.notifications.newMessages}
-              onMarkAllRead={notificationSystem.markAllAsRead}
-            />
-            
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1 sm:gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
-            >
-              <span className="text-sm sm:text-base md:text-lg">🚪</span>
-              <span className="hidden sm:inline">Logout</span>
-            </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -1694,7 +1688,7 @@ ${receiverAddressSection}`;
       {/* Navigation Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <div className="overflow-x-auto scrollbar-hide mb-2 sm:mb-3 md:mb-4 lg:mb-6">
-          <TabsList className="flex w-full gap-1 sm:gap-2 md:gap-3 min-w-max h-12 sm:h-14">
+          <TabsList className="flex w-full gap-1 sm:gap-2 md:gap-3 min-w-max h-12 sm:h-14 rounded-xl border border-gray-200 bg-white px-2 shadow-sm">
             <TabsTrigger value="orders" className="flex items-center gap-1 sm:gap-2 relative text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Utensils className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Active Orders</span>
@@ -1711,23 +1705,23 @@ ${receiverAddressSection}`;
           </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span className="hidden xs:inline truncate">Analytics</span>
+              <span className="hidden xs:inline truncate">Reports</span>
           </TabsTrigger>
             <TabsTrigger value="products" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
-              <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span className="hidden xs:inline truncate">Products</span>
+              <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Menu</span>
           </TabsTrigger>
             <TabsTrigger value="completed" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
-              <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span className="hidden xs:inline truncate">Completed</span>
+              <Archive className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Inventory</span>
           </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Clock className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span className="hidden xs:inline truncate">Order History</span>
+              <span className="hidden xs:inline truncate">History</span>
           </TabsTrigger>
             <TabsTrigger value="addons" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
-              <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span className="hidden xs:inline truncate">Addons</span>
+              <Truck className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Deliveries</span>
           </TabsTrigger>
             <TabsTrigger value="combos" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
@@ -1735,7 +1729,7 @@ ${receiverAddressSection}`;
           </TabsTrigger>
             <TabsTrigger value="config" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Settings className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span className="hidden xs:inline truncate">Config</span>
+              <span className="hidden xs:inline truncate">Settings</span>
           </TabsTrigger>
         </TabsList>
         </div>
@@ -1750,10 +1744,20 @@ ${receiverAddressSection}`;
               </div>
             </div>
           ) : orders.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">🍽️</div>
-              <h3 className="text-xl font-semibold text-gray-600 mb-2">No active orders</h3>
-              <p className="text-gray-500">New orders will appear here automatically</p>
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-10 sm:p-14 text-center">
+              <div className="mx-auto mb-5 h-24 w-24 rounded-2xl bg-green-50 border border-green-100 flex items-center justify-center">
+                <ClipboardList className="h-12 w-12 text-green-500" />
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-2">No active orders</h3>
+              <p className="text-gray-500 mb-7">New orders from customers will appear here automatically.</p>
+              <Button
+                variant="outline"
+                className="border-green-300 text-green-700 hover:bg-green-50"
+                onClick={() => setActiveTab("history")}
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                View Order History
+              </Button>
             </div>
           ) : (
             <div className="relative">
