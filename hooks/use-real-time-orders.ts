@@ -115,6 +115,9 @@ export function useRealTimeOrders({
           prevOrder.rider_assigned_at !== newOrder.rider_assigned_at ||
           prevOrder.delivered_at !== newOrder.delivered_at ||
           prevOrder.delivery_comment !== newOrder.delivery_comment ||
+          prevOrder.coupon_code !== newOrder.coupon_code ||
+          prevOrder.coupon_discount_amount !== newOrder.coupon_discount_amount ||
+          prevOrder.coupon_redeem_status !== newOrder.coupon_redeem_status ||
           prevOrder.customer_here_at !== (newOrder as Order & { customer_here_at?: string | null }).customer_here_at
         )
       })
