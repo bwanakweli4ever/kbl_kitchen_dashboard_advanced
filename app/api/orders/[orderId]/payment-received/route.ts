@@ -17,7 +17,7 @@ function parseUpstreamBody(bodyText: string): Record<string, unknown> {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ orderId: string }> | { orderId: string } },
+  { params }: { params: Promise<{ orderId: string }> },
 ) {
   try {
     const authorization = request.headers.get("authorization")

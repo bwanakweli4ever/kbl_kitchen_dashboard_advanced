@@ -215,7 +215,7 @@ export function DeliveredOrdersCalendarView({ token }: CompletedOrdersCalendarVi
       
       // Only count revenue for delivered orders
       if (order.status.toLowerCase() === 'delivered') {
-        stats[dateKey].revenue += order.food_total
+        stats[dateKey].revenue += order.food_total ?? 0
         stats[dateKey].delivered++
       } else if (order.status.toLowerCase() === 'cancelled') {
         stats[dateKey].cancelled++

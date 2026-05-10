@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, type ReactNode } from "react"
 import {
   Dialog,
   DialogContent,
@@ -25,10 +25,15 @@ import {
   MessageSquare,
   Truck,
   Package,
-  Calendar
+  Calendar,
+  Tag,
+  ShieldCheck,
+  ShieldX,
+  RefreshCw
 } from "lucide-react"
 import { config } from "@/lib/config"
 import { ChatWidget } from "./chat-widget"
+import { type Order } from "../hooks/use-real-time-orders"
 
 // Helper function to get stored token
 function getStoredToken(): string | null {
@@ -128,38 +133,6 @@ function getIngredientStyle(ingredientName: string): { bgColor: string; textColo
   }
 }
 
-interface Order {
-  id: number
-  wa_id: string
-  profile_name: string
-  size: string
-  quantity: number
-  ingredients: string[]
-  spice_level: string
-  sauce: string
-  food_total: number | null
-  delivery_info: string
-  delivery_latitude?: number | null
-  delivery_longitude?: number | null
-  delivery_address?: string | null
-  status: string
-  customer_total_orders: number
-  created_at: string
-  items?: string
-  drinks?: string
-  preset_name?: string
-  payment_status?: string
-  payment_received_at?: string
-  rider_name?: string | null
-  rider_phone?: string | null
-  rider_assigned_at?: string | null
-  delivered_at?: string | null
-  delivery_comment?: string | null
-  pickup_type?: string | null
-  customer_here_at?: string | null
-  scheduled_delivery_at?: string | null
-}
-
 interface OrderDetailModalProps {
   order: Order | null
   open: boolean
@@ -168,7 +141,7 @@ interface OrderDetailModalProps {
   calculateOrderTotal: (order: Order) => number
   getBreadChoice: (size: string | null | undefined, item?: any) => string
   getSizeDisplayName: (productName: string) => string
-  getSpiceLevel: (level: string | null) => { color: string; icon: JSX.Element; label: string }
+  getSpiceLevel: (level: string | null) => { color: string; icon: ReactNode; label: string }
   parseCoffeeItem?: (item: any) => { isCoffee: boolean; type: string; sugarDisplay: string }
   onOpenChat?: (waId: string, customerName: string, orderId?: number) => void
   onUpdateOrder?: (orderId: number, status: string, riderName?: string, riderPhone?: string, deliveryComment?: string) => Promise<void>
@@ -199,6 +172,116 @@ export function OrderDetailModal({
   const [isAssigningRider, setIsAssigningRider] = useState(false)
   const [isMarkingDelivered, setIsMarkingDelivered] = useState(false)
   const [showRiderForm, setShowRiderForm] = useState(false)
+
+  // Coupon fields – enriched by fetching from server when modal opens
+  const [enrichedCouponCode, setEnrichedCouponCode] = useState<string | null>(null)
+  const [enrichedCouponDiscount, setEnrichedCouponDiscount] = useState<number | null>(null)
+  const [enrichedCouponRedeemStatus, setEnrichedCouponRedeemStatus] = useState<string | null>(null)
+  const [loadingCoupon, setLoadingCoupon] = useState(false)
+
+  // Resolved coupon values: prefer server-fetched over prop fallback
+  const displayCouponCode = enrichedCouponCode ?? order?.coupon_code ?? null
+  const displayCouponDiscount = enrichedCouponDiscount ?? order?.coupon_discount_amount ?? null
+  const displayCouponRedeemStatus = enrichedCouponRedeemStatus ?? order?.coupon_redeem_status ?? null
+
+  // Coupon re-verify state
+  const [couponVerifyStatus, setCouponVerifyStatus] = useState<'idle' | 'loading' | 'valid' | 'invalid'>('idle')
+  const [couponVerifyResult, setCouponVerifyResult] = useState<{
+    discount_amount: number
+    discount_percentage: number
+    final_amount: number
+    coupon_type: string
+    error?: string
+  } | null>(null)
+
+  const handleReverifyCoupon = async () => {
+    if (!order || !displayCouponCode) return
+    setCouponVerifyStatus('loading')
+    setCouponVerifyResult(null)
+    try {
+      const storedToken = getStoredToken()
+      const amount = order.food_total ?? 0
+      const phone = order.customer_phone_number || order.wa_id || undefined
+      const email = order.customer_email || undefined
+      const body: Record<string, unknown> = {
+        code: displayCouponCode,
+        amount: amount > 0 ? amount : 1,
+      }
+      if (phone) body.phone = phone
+      if (email) body.email = email
+
+      const res = await fetch('/api/coupons/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${storedToken ?? ''}`,
+        },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (data.verified) {
+        setCouponVerifyStatus('valid')
+        setCouponVerifyResult({
+          discount_amount: data.discount_amount ?? 0,
+          discount_percentage: data.discount_percentage ?? 0,
+          final_amount: data.final_amount ?? 0,
+          coupon_type: data.coupon_type ?? 'fixed',
+        })
+      } else {
+        setCouponVerifyStatus('invalid')
+        setCouponVerifyResult({
+          discount_amount: 0,
+          discount_percentage: 0,
+          final_amount: amount,
+          coupon_type: 'fixed',
+          error: data.error || 'Coupon is invalid or cannot be verified',
+        })
+      }
+    } catch (err) {
+      setCouponVerifyStatus('invalid')
+      setCouponVerifyResult({
+        discount_amount: 0,
+        discount_percentage: 0,
+        final_amount: order.food_total ?? 0,
+        coupon_type: 'fixed',
+        error: err instanceof Error ? err.message : 'Network error',
+      })
+    }
+  }
+
+  // Reset coupon verify state when order changes
+  useEffect(() => {
+    setCouponVerifyStatus('idle')
+    setCouponVerifyResult(null)
+    setEnrichedCouponCode(null)
+    setEnrichedCouponDiscount(null)
+    setEnrichedCouponRedeemStatus(null)
+  }, [order?.id])
+
+  // Fetch fresh order data (includes coupon fields from raw_message) when modal opens
+  useEffect(() => {
+    if (!open || !order?.id) return
+    const fetchCouponInfo = async () => {
+      setLoadingCoupon(true)
+      try {
+        const storedToken = getStoredToken()
+        const res = await fetch(`/api/orders/${order.id}`, {
+          headers: { Authorization: `Bearer ${storedToken ?? ''}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.coupon_code) setEnrichedCouponCode(data.coupon_code)
+          if (data.coupon_discount_amount != null) setEnrichedCouponDiscount(data.coupon_discount_amount)
+          if (data.coupon_redeem_status) setEnrichedCouponRedeemStatus(data.coupon_redeem_status)
+        }
+      } catch {
+        // Non-fatal – fall back to prop values
+      } finally {
+        setLoadingCoupon(false)
+      }
+    }
+    fetchCouponInfo()
+  }, [open, order?.id])
   
   // Load rider info when order changes
   useEffect(() => {
@@ -790,6 +873,114 @@ export function OrderDetailModal({
           {order.preset_name && (
             <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border-2 border-purple-200">
               <div className="text-xl font-bold mb-2">Preset Order: {order.preset_name}</div>
+            </div>
+          )}
+
+          {/* Coupon Section */}
+          {(displayCouponCode || loadingCoupon) && (
+            <div className={`rounded-lg p-5 border-2 ${
+              couponVerifyStatus === 'valid' ? 'bg-green-50 border-green-400' :
+              couponVerifyStatus === 'invalid' ? 'bg-red-50 border-red-400' :
+              'bg-amber-50 border-amber-300'
+            }`}>
+              <h3 className="text-xl font-bold mb-3 flex items-center gap-2">
+                <Tag className="h-5 w-5" />
+                Coupon Applied by Customer
+                {loadingCoupon && <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />}
+              </h3>
+              {displayCouponCode && (
+              <div className="flex flex-wrap items-start gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-gray-600">Coupon Code:</span>
+                    <span className="font-mono font-bold text-lg tracking-widest">{displayCouponCode}</span>
+                  </div>
+                  {displayCouponDiscount != null && displayCouponDiscount > 0 && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-semibold text-gray-600">Claimed Discount:</span>
+                      <span className="font-bold text-green-700">
+                        -{displayCouponDiscount.toLocaleString()} RWF
+                      </span>
+                    </div>
+                  )}
+                  {order.food_total != null && displayCouponDiscount != null && displayCouponDiscount > 0 && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-semibold text-gray-600">Order Total After Coupon:</span>
+                      <span className="font-bold">
+                        {order.food_total.toLocaleString()} RWF
+                      </span>
+                    </div>
+                  )}
+                  {displayCouponRedeemStatus && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-600">Redeem Status:</span>
+                      <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${
+                        displayCouponRedeemStatus === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>{displayCouponRedeemStatus}</span>
+                    </div>
+                  )}
+
+                  {/* Verify result display */}
+                  {couponVerifyStatus === 'valid' && couponVerifyResult && (
+                    <div className="mt-3 p-3 bg-green-100 rounded-lg border border-green-400 space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-green-800">
+                        <ShieldCheck className="h-5 w-5" />
+                        Coupon VERIFIED on live server ✓
+                      </div>
+                      <div className="text-sm text-green-900">
+                        Type: {couponVerifyResult.coupon_type === 'percentage' ? `Percentage (${couponVerifyResult.discount_percentage}%)` : 'Fixed amount'}
+                      </div>
+                      <div className="text-sm text-green-900 font-semibold">
+                        Verified discount: -{couponVerifyResult.discount_amount.toLocaleString()} RWF
+                      </div>
+                      <div className="text-sm text-green-900">
+                        Payable after discount: {couponVerifyResult.final_amount.toLocaleString()} RWF
+                      </div>
+                    </div>
+                  )}
+
+                  {couponVerifyStatus === 'invalid' && couponVerifyResult && (
+                    <div className="mt-3 p-3 bg-red-100 rounded-lg border border-red-400 space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-red-800">
+                        <ShieldX className="h-5 w-5" />
+                        Coupon REJECTED — do not apply discount
+                      </div>
+                      <div className="text-sm text-red-900">
+                        {couponVerifyResult.error}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Re-verify button */}
+                <div className="flex-shrink-0">
+                  <Button
+                    onClick={handleReverifyCoupon}
+                    disabled={couponVerifyStatus === 'loading'}
+                    variant="outline"
+                    className={`flex items-center gap-2 font-semibold ${
+                      couponVerifyStatus === 'valid'
+                        ? 'border-green-500 text-green-700 hover:bg-green-50'
+                        : couponVerifyStatus === 'invalid'
+                        ? 'border-red-500 text-red-700 hover:bg-red-50'
+                        : 'border-amber-500 text-amber-700 hover:bg-amber-50'
+                    }`}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${couponVerifyStatus === 'loading' ? 'animate-spin' : ''}`} />
+                    {couponVerifyStatus === 'loading'
+                      ? 'Verifying...'
+                      : couponVerifyStatus === 'valid'
+                      ? 'Re-verify'
+                      : couponVerifyStatus === 'invalid'
+                      ? 'Re-verify'
+                      : 'Verify on Live Server'}
+                  </Button>
+                  <p className="text-xs text-gray-500 mt-1 max-w-[150px] text-center">
+                    Check this coupon is real and not invented
+                  </p>
+                </div>
+              </div>
+              )}
             </div>
           )}
 

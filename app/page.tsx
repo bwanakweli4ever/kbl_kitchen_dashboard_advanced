@@ -49,7 +49,7 @@ import { ProductsManagement } from "../components/products-management";
 import { AppConfigManagement } from "../components/app-config-management";
 import { AddonsManagement } from "../components/addons-management";
 import { useNotifications } from "../hooks/use-notifications";
-import { useRealTimeOrders } from "../hooks/use-real-time-orders";
+import { useRealTimeOrders, type Order } from "../hooks/use-real-time-orders";
 import { NotificationCenter } from "../components/notification-center";
 import { NotificationBadge } from "../components/notification-badge";
 import { RealTimeIndicator } from "../components/real-time-indicator";
@@ -58,42 +58,18 @@ import { OrderDetailModal } from "../components/order-detail-modal";
 import { ChatWidget } from "../components/chat-widget";
 import { reverseGeocode } from "@/lib/reverse-geocode";
 
-interface Order {
-  id: number;
-  wa_id: string;
-  profile_name: string;
-  size: string;
-  quantity: number;
-  ingredients: string[];
-  spice_level: string;
-  sauce: string;
-  food_total: number | null;
-  delivery_info: string;
-  delivery_latitude?: number | null;
-  delivery_longitude?: number | null;
-  delivery_address?: string | null;
-  status: string;
-  customer_total_orders: number;
-  created_at: string;
-  updated_at: string;
-  items?: string;
-  drinks?: string;
-  order_source?: string;
-  preset_name?: string;
-  payment_method?: string;
-  payment_status?: string;
-  payment_received_at?: string;
-  rider_name?: string | null;
-  rider_phone?: string | null;
-  rider_assigned_at?: string | null;
-  delivered_at?: string | null;
-  delivery_comment?: string | null;
-  pickup_type?: string | null;
-  customer_here_at?: string | null;
-  scheduled_delivery_at?: string | null;
-}
-
 export default function KitchenDashboard() {
+  type CouponVerifyState = {
+    status: "idle" | "loading" | "valid" | "invalid";
+    verifiedDiscount?: number;
+    error?: string;
+    checkedAt?: number;
+    cooldownUntil?: number;
+  };
+
+  const COUPON_VERIFY_CACHE_MS = 5 * 60 * 1000;
+  const COUPON_VERIFY_COOLDOWN_MS = 60 * 1000;
+
   const [apiKey, setApiKey] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -109,6 +85,7 @@ export default function KitchenDashboard() {
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [chatWidgetState, setChatWidgetState] = useState<{ open: boolean; waId: string; customerName: string; orderId?: number } | null>(null);
+  const [couponVerifyByOrder, setCouponVerifyByOrder] = useState<Record<number, CouponVerifyState>>({});
   const lastSeenInboundByCustomerRef = useRef<Record<string, string>>({});
   const hasInitializedMessageWatcherRef = useRef(false);
 
@@ -243,6 +220,100 @@ export default function KitchenDashboard() {
     await refreshOrders();
     setRefreshSuccess(true);
     setTimeout(() => setRefreshSuccess(false), 2000);
+  };
+
+  const handleVerifyCouponLive = async (order: Order) => {
+    if (!token || !order.coupon_code) return;
+
+    const now = Date.now();
+    const currentState = couponVerifyByOrder[order.id];
+
+    if (currentState?.status === "loading") return;
+
+    if (currentState?.cooldownUntil && now < currentState.cooldownUntil) {
+      const secondsLeft = Math.max(1, Math.ceil((currentState.cooldownUntil - now) / 1000));
+      setCouponVerifyByOrder((prev) => ({
+        ...prev,
+        [order.id]: {
+          ...currentState,
+          status: "invalid",
+          error: `Rate limited. Try again in ${secondsLeft}s.`,
+        },
+      }));
+      return;
+    }
+
+    if (currentState?.status === "valid" && currentState.checkedAt && now - currentState.checkedAt < COUPON_VERIFY_CACHE_MS) {
+      return;
+    }
+
+    const amount = Number(order.food_total || 0);
+    if (!(amount > 0)) {
+      setCouponVerifyByOrder((prev) => ({
+        ...prev,
+        [order.id]: { status: "invalid", error: "Invalid order amount", checkedAt: now },
+      }));
+      return;
+    }
+
+    setCouponVerifyByOrder((prev) => ({
+      ...prev,
+      [order.id]: { status: "loading" },
+    }));
+
+    try {
+      const response = await fetch("/api/coupons/verify", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code: order.coupon_code,
+          amount,
+          phone: order.customer_phone_number || order.wa_id || undefined,
+          email: order.customer_email || undefined,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      const isValid = response.ok && (data?.verified === true || data?.valid === true);
+      const verifiedDiscount = Number(data?.discount_amount || 0);
+
+      if (response.status === 429) {
+        setCouponVerifyByOrder((prev) => ({
+          ...prev,
+          [order.id]: {
+            status: "invalid",
+            error: typeof data?.error === "string" ? data.error : "Too many verification requests. Please wait and retry.",
+            checkedAt: now,
+            cooldownUntil: now + COUPON_VERIFY_COOLDOWN_MS,
+          },
+        }));
+        return;
+      }
+
+      if (isValid && verifiedDiscount > 0) {
+        setCouponVerifyByOrder((prev) => ({
+          ...prev,
+          [order.id]: { status: "valid", verifiedDiscount, checkedAt: now },
+        }));
+      } else {
+        setCouponVerifyByOrder((prev) => ({
+          ...prev,
+          [order.id]: {
+            status: "invalid",
+            error: typeof data?.error === "string" ? data.error : "Coupon verification failed",
+            checkedAt: now,
+          },
+        }));
+      }
+    } catch {
+      setCouponVerifyByOrder((prev) => ({
+        ...prev,
+        [order.id]: { status: "invalid", error: "Live verification error", checkedAt: now },
+      }));
+    }
   };
 
   // Extended token validation - only validate every 5 minutes and don't logout on errors
@@ -519,7 +590,7 @@ export default function KitchenDashboard() {
         },
         body: JSON.stringify({ 
           status: "delivered",
-          delivery_comment: deliveryComment || undefined
+          delivery_comment: undefined
         }),
       });
       
@@ -1063,6 +1134,22 @@ ${receiverAddressSection}`;
       loyaltyDiscount,
       payableTotal,
       hasLoyaltyDiscount: loyaltyDiscount > 0,
+    };
+  };
+
+  const getVerifiedPricingBreakdown = (order: Order) => {
+    const base = getOrderPricingBreakdown(order);
+    const verifyState = couponVerifyByOrder[order.id];
+    const appliedDiscount =
+      verifyState?.status === "valid"
+        ? Math.max(0, Number(verifyState.verifiedDiscount || 0))
+        : 0;
+
+    return {
+      ...base,
+      appliedDiscount,
+      verifiedPayableTotal: Math.max(base.payableTotal - appliedDiscount, 0),
+      hasVerifiedDiscount: appliedDiscount > 0,
     };
   };
 
@@ -1715,18 +1802,30 @@ ${receiverAddressSection}`;
                           
                           <div className="text-right">
                               {(() => {
-                                const pricing = getOrderPricingBreakdown(order);
+                                const pricing = getVerifiedPricingBreakdown(order);
                                 return (
                                   <>
                               <div className="text-lg sm:text-xl md:text-2xl font-bold text-green-600">
-                              {formatCurrency(pricing.payableTotal)}
+                              {formatCurrency(pricing.hasVerifiedDiscount ? pricing.verifiedPayableTotal : pricing.payableTotal)}
                             </div>
                               <div className="text-xs sm:text-sm text-gray-500">Payable Total</div>
+                              {pricing.hasVerifiedDiscount && (
+                                <div className="text-[11px] sm:text-xs font-semibold text-emerald-700 mt-1">
+                                  Applied Amount: -{formatCurrency(pricing.appliedDiscount)}
+                                </div>
+                              )}
                               {pricing.hasLoyaltyDiscount && (
                                 <div className="mt-2 rounded-md border border-green-200 bg-green-50 px-2 py-1.5 text-right">
                                   <div className="text-xs text-gray-700">Subtotal: {formatCurrency(pricing.subtotal)}</div>
                                   <div className="text-xs font-semibold text-red-600">Loyalty Discount: -{formatCurrency(pricing.loyaltyDiscount)}</div>
-                                  <div className="text-xs font-semibold text-green-700">Payable: {formatCurrency(pricing.payableTotal)}</div>
+                                  <div className="text-xs font-semibold text-green-700">
+                                    Payable: {formatCurrency(pricing.hasVerifiedDiscount ? pricing.verifiedPayableTotal : pricing.payableTotal)}
+                                  </div>
+                                  {pricing.hasVerifiedDiscount && (
+                                    <div className="text-xs font-semibold text-emerald-700">
+                                      Applied Amount: -{formatCurrency(pricing.appliedDiscount)}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                                   </>
@@ -1849,6 +1948,63 @@ ${receiverAddressSection}`;
                             </div>
                           </div>
                         </div>
+
+                        {/* Coupon Banner */}
+                        {order.coupon_code && (
+                          <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg">
+                            <span className="text-base">🏷️</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-semibold text-amber-900 text-sm">Coupon: </span>
+                              <span className="font-mono font-bold text-amber-800 tracking-wider text-sm">{order.coupon_code}</span>
+                              {order.coupon_discount_amount != null && order.coupon_discount_amount > 0 && (
+                                <span className="ml-2 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-1.5 py-0.5">
+                                  -{order.coupon_discount_amount.toLocaleString()} RWF off
+                                </span>
+                              )}
+                              {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (
+                                <span className="ml-2 text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded px-1.5 py-0.5">
+                                  Verified: -{Math.round(couponVerifyByOrder[order.id].verifiedDiscount || 0).toLocaleString()} RWF
+                                </span>
+                              )}
+                              {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (
+                                <div className="mt-1 text-xs font-semibold text-emerald-800">
+                                  Payable Total: {formatCurrency(Math.max(calculateOrderTotal(order) - Number(couponVerifyByOrder[order.id]?.verifiedDiscount || 0), 0))}
+                                </div>
+                              )}
+                              {couponVerifyByOrder[order.id]?.status === "invalid" && couponVerifyByOrder[order.id]?.error && (
+                                <div className="mt-1 text-xs font-medium text-red-700">
+                                  {couponVerifyByOrder[order.id]?.error}
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                couponVerifyByOrder[order.id]?.status === "loading" ||
+                                ((couponVerifyByOrder[order.id]?.cooldownUntil || 0) > Date.now())
+                              }
+                              onClick={() => handleVerifyCouponLive(order)}
+                              className="h-7 px-2 text-xs border-amber-400 text-amber-800 hover:bg-amber-100"
+                            >
+                              {couponVerifyByOrder[order.id]?.status === "loading"
+                                ? "Verifying..."
+                                : ((couponVerifyByOrder[order.id]?.cooldownUntil || 0) > Date.now())
+                                  ? `Wait ${Math.max(1, Math.ceil(((couponVerifyByOrder[order.id]?.cooldownUntil || 0) - Date.now()) / 1000))}s`
+                                  : "Verify Live"}
+                            </Button>
+                            {couponVerifyByOrder[order.id]?.status === "valid" ? (
+                              <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-full px-2 py-0.5 flex-shrink-0">✓ Verified Live</span>
+                            ) : couponVerifyByOrder[order.id]?.status === "invalid" ? (
+                              <span className="text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-2 py-0.5 flex-shrink-0">✗ Invalid</span>
+                            ) : order.coupon_redeem_status === 'success' ? (
+                              <span className="text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded-full px-2 py-0.5 flex-shrink-0">✓ Redeemed</span>
+                            ) : (
+                              <span className="text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5 flex-shrink-0">Pending</span>
+                            )}
+                          </div>
+                        )}
                       </CardHeader>
 
                       <CardContent className="space-y-6 p-6 sm:p-7 md:p-8">

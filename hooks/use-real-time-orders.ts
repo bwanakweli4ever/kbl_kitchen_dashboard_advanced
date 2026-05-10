@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { config } from "@/lib/config"
 
-interface Order {
+export interface Order {
   id: number
   wa_id: string
   profile_name: string
@@ -14,10 +14,14 @@ interface Order {
   sauce: string
   food_total: number
   delivery_info: string
+  delivery_latitude?: number | null
+  delivery_longitude?: number | null
+  delivery_address?: string | null
   status: string
-  items: string // JSON string containing array of food items
-  drinks: string // JSON string containing array of drink items
+  items: string
+  drinks: string
   order_source: string
+  preset_name?: string | null
   customer_total_orders: number
   created_at: string
   updated_at: string
@@ -31,6 +35,12 @@ interface Order {
   delivery_comment?: string | null
   pickup_type?: string | null
   customer_here_at?: string | null
+  scheduled_delivery_at?: string | null
+  coupon_code?: string | null
+  coupon_discount_amount?: number | null
+  coupon_redeem_status?: string | null
+  customer_phone_number?: string | null
+  customer_email?: string | null
 }
 
 interface UseRealTimeOrdersProps {
