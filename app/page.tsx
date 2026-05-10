@@ -48,6 +48,7 @@ import { OrdersChart } from "../components/orders-chart";
 import { ProductsManagement } from "../components/products-management";
 import { AppConfigManagement } from "../components/app-config-management";
 import { AddonsManagement } from "../components/addons-management";
+import { CombosManagement } from "../components/combos-management";
 import { useNotifications } from "../hooks/use-notifications";
 import { useRealTimeOrders, type Order } from "../hooks/use-real-time-orders";
 import { NotificationCenter } from "../components/notification-center";
@@ -1728,6 +1729,10 @@ ${receiverAddressSection}`;
               <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Addons</span>
           </TabsTrigger>
+            <TabsTrigger value="combos" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
+              <Package className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="hidden xs:inline truncate">Combos</span>
+          </TabsTrigger>
             <TabsTrigger value="config" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-3 sm:py-4 touch-manipulation flex-shrink-0 h-full">
               <Settings className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
               <span className="hidden xs:inline truncate">Config</span>
@@ -2663,6 +2668,11 @@ ${receiverAddressSection}`;
         {/* Addons Tab */}
         <TabsContent value="addons">
           <AddonsManagement token={token} />
+        </TabsContent>
+
+        {/* Combos Tab */}
+        <TabsContent value="combos">
+          <CombosManagement token={token} />
         </TabsContent>
 
         {/* App Config Tab (source availability + site config) */}
