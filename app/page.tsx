@@ -47,7 +47,6 @@ import {
   Truck,
   Settings,
   Eye,
-  EyeOff,
   KeyRound,
   ShieldCheck,
   Lock
@@ -88,7 +87,6 @@ export default function KitchenDashboard() {
   const ORDERS_VISIBLE_PAGE_SIZE = 10;
 
   const [apiKey, setApiKey] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState("orders");
@@ -149,162 +147,87 @@ export default function KitchenDashboard() {
     }
   }, []);
 
-      <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#f5faf6] via-[#f8faf7] to-[#fbf9f1] px-4 py-8 sm:px-6">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-24 -left-24 h-80 w-80 rounded-full bg-emerald-200/25 blur-3xl" />
-          <div className="absolute -bottom-36 -right-24 h-96 w-96 rounded-full bg-yellow-100/35 blur-3xl" />
+  // Register service worker for PWA functionality
+  useEffect(() => {
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+      let hasReloadedForNewWorker = false;
 
-          <Utensils className="absolute left-[7%] top-[36%] h-20 w-20 -rotate-45 text-emerald-200/55" strokeWidth={1.5} />
-          <ShoppingBag className="absolute left-[12%] top-[72%] h-16 w-16 text-emerald-200/50" strokeWidth={1.5} />
-          <Package className="absolute right-[12%] top-[25%] h-16 w-16 text-emerald-200/50" strokeWidth={1.5} />
-          <Flame className="absolute right-[18%] top-[53%] h-14 w-14 text-emerald-200/45" strokeWidth={1.5} />
-          <Droplets className="absolute left-[16%] top-[20%] h-8 w-8 text-emerald-200/45" strokeWidth={1.5} />
-          <Settings className="absolute right-[18%] top-[73%] h-8 w-8 text-emerald-200/45" strokeWidth={1.5} />
-
-          <div className="absolute left-[4%] top-[8%] grid grid-cols-4 gap-2 opacity-35">
-            {Array.from({ length: 16 }).map((_, index) => (
-              <span key={`left-dot-${index}`} className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-            ))}
-          </div>
-          <div className="absolute right-[4%] top-[7%] grid grid-cols-4 gap-2 opacity-35">
-            {Array.from({ length: 16 }).map((_, index) => (
-              <span key={`right-dot-${index}`} className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-            ))}
-          </div>
-          <div className="absolute left-[4%] bottom-[10%] grid grid-cols-4 gap-2 opacity-30">
-            {Array.from({ length: 16 }).map((_, index) => (
-              <span key={`bottom-left-dot-${index}`} className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-            ))}
-          </div>
-          <div className="absolute right-[4%] bottom-[10%] grid grid-cols-4 gap-2 opacity-30">
-            {Array.from({ length: 16 }).map((_, index) => (
-              <span key={`bottom-right-dot-${index}`} className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-            ))}
-          </div>
       navigator.serviceWorker.register('/sw.js')
         .then((registration) => {
-        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[520px] flex-col items-center justify-center">
-          <Card className="w-full rounded-[28px] border border-emerald-100/70 bg-white/95 shadow-[0_24px_70px_-28px_rgba(21,128,61,0.35)] backdrop-blur-sm">
-            <CardHeader className="pb-3 pt-10 text-center">
-              <div className="flex flex-col items-center gap-6">
-                <div className="flex items-center justify-center gap-3">
-                  <img
-                    src="/logo.png"
-                    alt="KBL Bites"
-                    className="h-16 w-16 object-contain"
-                  />
-                  <div className="flex flex-col items-start">
-                    <CardTitle className="text-[52px] font-extrabold tracking-tight text-emerald-700 leading-none">
-                      KBL Bites
-                    </CardTitle>
-                    <p className="text-[20px] font-bold uppercase tracking-[0.22em] text-amber-600">
-                      Kitchen
-                    </p>
-                  </div>
-                </div>
+          registration.update().catch(() => undefined);
 
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 shadow-inner">
-                  <KeyRound className="h-9 w-9 text-emerald-600" />
-                </div>
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (!newWorker) return;
 
-                <div className="space-y-2">
-                  <h2 className="text-5xl font-extrabold tracking-tight text-slate-800">Welcome Back!</h2>
-                  <p className="text-[18px] text-slate-500">
-                    Sign in with your API key to manage orders securely.
-                  </p>
-                </div>
-              </div>
-            </CardHeader>
+            newWorker.addEventListener('statechange', () => {
+              if (
+                newWorker.state === 'activated' &&
+                navigator.serviceWorker.controller &&
+                !hasReloadedForNewWorker
+              ) {
+                hasReloadedForNewWorker = true;
+                window.location.reload();
+              }
+            });
+          });
 
-            <CardContent className="space-y-5 px-10 pb-9 pt-3">
-              <div className="space-y-2.5">
-                <label htmlFor="api-key" className="text-[18px] font-semibold text-slate-700">
-                  API Key
-                </label>
-                <div className="relative">
-                  <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600" />
-                  <Input
-                    id="api-key"
-                    type={showApiKey ? "text" : "password"}
-                    placeholder="........................"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                    className="h-14 rounded-2xl border-2 border-emerald-100 bg-white pl-12 pr-14 text-[17px] tracking-wide text-slate-700 placeholder:text-slate-400 focus-visible:border-emerald-400 focus-visible:ring-emerald-300/35"
-                    disabled={loading}
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey((previous) => !previous)}
-                    disabled={loading}
-                    className="absolute right-3 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                  >
-                    {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-              </div>
+          console.log('SW registered: ', registration);
+        })
+        .catch((registrationError) => {
+          console.log('SW registration failed: ', registrationError);
+        });
+    }
+  }, []);
 
-              <Button
-                onClick={handleLogin}
-                disabled={loading || !apiKey.trim()}
-                className="h-14 w-full rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 text-[24px] font-bold text-white shadow-[0_14px_25px_-16px_rgba(22,163,74,0.85)] transition-all hover:brightness-105 disabled:pointer-events-none disabled:opacity-60"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                    Signing in...
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <Lock className="h-5 w-5" />
-                    Sign In
-                  </span>
-                )}
-              </Button>
+  // Notification system
+  const notificationSystem = useNotifications({
+    token,
+    isActive: isAuthenticated && activeTab === "orders"
+  });
+  const { triggerNewOrderNotification, triggerNewMessageNotification, markAllAsRead } = notificationSystem;
 
-              {loading && (
-                <p className="text-center text-sm text-slate-500">Verifying with server...</p>
-              )}
+  // Real-time orders hook
+  const { orders, loading: ordersLoading, lastFetch, isPolling, refreshOrders } = useRealTimeOrders({
+    token,
+    isActive: isAuthenticated && activeTab === "orders",
+    onNewOrder: useCallback((order: Order) => {
+      triggerNewOrderNotification(1);
+    }, [triggerNewOrderNotification]),
+    onOrderUpdate: useCallback(() => {}, [])
+  });
 
-              {error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-                  <p className="text-center text-sm text-red-700">{error}</p>
-                </div>
-              )}
+  const visibleOrders = useMemo(() => {
+    return orders.slice(0, visibleOrderCount);
+  }, [orders, visibleOrderCount]);
 
-              {successMessage && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-center text-sm font-medium text-emerald-700">{successMessage}</p>
-                </div>
-              )}
+  useEffect(() => {
+    setVisibleOrderCount((prev) => {
+      if (orders.length === 0) return ORDERS_VISIBLE_PAGE_SIZE;
+      if (prev < ORDERS_VISIBLE_PAGE_SIZE) return ORDERS_VISIBLE_PAGE_SIZE;
+      return Math.min(prev, orders.length);
+    });
+  }, [orders.length]);
 
-              <div className="flex items-center gap-4 pt-1">
-                <div className="h-px flex-1 bg-slate-200" />
-                <span className="text-sm text-slate-400">or</span>
-                <div className="h-px flex-1 bg-slate-200" />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-center text-[13px] text-slate-500">
-                <div className="flex items-center justify-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                  <span>Secure connection</span>
-                </div>
-                <div className="flex items-center justify-center gap-1.5">
-                  <Lock className="h-4 w-4 text-emerald-600" />
-                  <span>Encrypted</span>
-                </div>
-                <div className="flex items-center justify-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                  <span>Trusted</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <p className="mt-10 text-sm text-slate-400">© 2024 KBL Bites Kitchen. All rights reserved.</p>
-        </div>
+  // Refresh orders after status update (with debouncing)
+  const handleOrderStatusUpdated = useCallback(async (forceRefresh = false) => {
+    // Force refresh if requested (e.g., when rider is assigned), otherwise use debouncing
+    const now = Date.now()
+    const lastFetchTime = lastFetch ? lastFetch.getTime() : 0
+    if (forceRefresh || now - lastFetchTime > 5000) {
+      await refreshOrders(forceRefresh)
+    }
+  }, [refreshOrders, lastFetch])
+  
+  // Sync selectedOrderForModal with orders array when orders update (to preserve rider info)
+  useEffect(() => {
+    if (selectedOrderForModal && orders.length > 0) {
+      const updatedOrder = orders.find(o => o.id === selectedOrderForModal.id)
+      if (updatedOrder && (
+        updatedOrder.rider_name !== selectedOrderForModal.rider_name ||
+        updatedOrder.rider_phone !== selectedOrderForModal.rider_phone ||
+        updatedOrder.rider_assigned_at !== selectedOrderForModal.rider_assigned_at
+      )) {
         setSelectedOrderForModal(updatedOrder)
       }
     }
@@ -1598,86 +1521,142 @@ ${receiverAddressSection}`;
 
   if (!isAuthenticated) {
     return (
-      <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-emerald-50 via-white to-amber-50">
-        {/* Subtle background orbs */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-emerald-200/30 blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-amber-200/30 blur-3xl" />
+      <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#f4faf5] via-[#f8fbf8] to-[#fbf8ef] px-4 py-8 sm:px-6">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -left-28 -top-24 h-80 w-80 rounded-full bg-emerald-200/20 blur-3xl" />
+          <div className="absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-yellow-100/30 blur-3xl" />
+
+          <Utensils className="absolute left-[7%] top-[40%] h-20 w-20 -rotate-45 text-emerald-200/50" strokeWidth={1.5} />
+          <ShoppingBag className="absolute left-[11%] top-[72%] h-16 w-16 text-emerald-200/45" strokeWidth={1.5} />
+          <Package className="absolute right-[11%] top-[23%] h-16 w-16 text-emerald-200/45" strokeWidth={1.5} />
+          <Flame className="absolute right-[16%] top-[53%] h-12 w-12 text-emerald-200/45" strokeWidth={1.5} />
+
+          <div className="absolute left-[4%] top-[8%] grid grid-cols-4 gap-2 opacity-35">
+            {Array.from({ length: 16 }).map((_, index) => (
+              <span key={`lt-${index}`} className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+            ))}
+          </div>
+          <div className="absolute right-[4%] top-[8%] grid grid-cols-4 gap-2 opacity-35">
+            {Array.from({ length: 16 }).map((_, index) => (
+              <span key={`rt-${index}`} className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+            ))}
+          </div>
+          <div className="absolute left-[4%] bottom-[10%] grid grid-cols-4 gap-2 opacity-30">
+            {Array.from({ length: 16 }).map((_, index) => (
+              <span key={`lb-${index}`} className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+            ))}
+          </div>
+          <div className="absolute right-[4%] bottom-[10%] grid grid-cols-4 gap-2 opacity-30">
+            {Array.from({ length: 16 }).map((_, index) => (
+              <span key={`rb-${index}`} className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+            ))}
+          </div>
         </div>
 
-        <Card className="relative w-full max-w-md border-0 shadow-xl shadow-emerald-900/10 rounded-2xl overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none" />
-          <CardHeader className="text-center pb-2 pt-8 sm:pt-10">
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center justify-center gap-3">
-                <img
-                  src="/logo.png"
-                  alt="KBL Bites"
-                  className="w-14 h-14 sm:w-16 sm:h-16 object-contain drop-shadow-sm"
-                />
-                <div className="flex flex-col items-start">
-                  <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-emerald-700">
-                    KBL Bites
-                  </CardTitle>
-                  <p className="text-amber-600 text-xs sm:text-sm font-medium uppercase tracking-widest">
-                    Kitchen
-                  </p>
+        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[520px] flex-col items-center justify-center">
+          <Card className="w-full rounded-[28px] border border-emerald-100/70 bg-white/95 shadow-[0_24px_70px_-28px_rgba(21,128,61,0.35)] backdrop-blur-sm">
+            <CardHeader className="pb-3 pt-10 text-center">
+              <div className="flex flex-col items-center gap-5">
+                <div className="flex items-center justify-center gap-3">
+                  <img src="/logo.png" alt="KBL Bites" className="h-16 w-16 object-contain" />
+                  <div className="flex flex-col items-start">
+                    <CardTitle className="text-3xl font-extrabold tracking-tight text-emerald-700">
+                      KBL Bites
+                    </CardTitle>
+                    <p className="text-lg font-bold uppercase tracking-[0.16em] text-amber-600">Kitchen</p>
+                  </div>
+                </div>
+
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 shadow-inner">
+                  <KeyRound className="h-9 w-9 text-emerald-600" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2 className="text-5xl font-extrabold tracking-tight text-slate-800">Welcome Back!</h2>
+                  <p className="text-base text-slate-500">Sign in with your API key to manage orders securely.</p>
                 </div>
               </div>
-              <p className="text-gray-500 text-sm max-w-xs">
-                Sign in with your API key to manage orders
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 pb-8 sm:pb-10 px-6 sm:px-8">
-            <div className="space-y-2">
-              <label htmlFor="api-key" className="text-sm font-medium text-gray-700">
-                API Key
-              </label>
-              <Input
-                id="api-key"
-                type="password"
-                placeholder="Enter your API key"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                className="h-11 text-base border-gray-200 focus:border-emerald-500 focus:ring-emerald-500/20 rounded-xl"
-                disabled={loading}
-                autoComplete="current-password"
-              />
-            </div>
-            <Button
-              onClick={handleLogin}
-              disabled={loading || !apiKey.trim()}
-              className="w-full h-12 text-base font-semibold bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/30 transition-all duration-200 disabled:opacity-60 disabled:pointer-events-none"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  Signing in…
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  Sign in
-                  <span className="opacity-80">→</span>
-                </span>
+            </CardHeader>
+
+            <CardContent className="space-y-5 px-10 pb-9 pt-3">
+              <div className="space-y-2.5">
+                <label htmlFor="api-key" className="text-lg font-semibold text-slate-700">API Key</label>
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600" />
+                  <Input
+                    id="api-key"
+                    type="password"
+                    placeholder="........................"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    className="h-14 rounded-2xl border-2 border-emerald-100 bg-white pl-12 pr-14 text-[17px] tracking-wide text-slate-700 placeholder:text-slate-400 focus-visible:border-emerald-400 focus-visible:ring-emerald-300/35"
+                    disabled={loading}
+                    autoComplete="current-password"
+                  />
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
+                    <Eye className="h-5 w-5" />
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleLogin}
+                disabled={loading || !apiKey.trim()}
+                className="h-14 w-full rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 text-xl font-bold text-white shadow-[0_14px_25px_-16px_rgba(22,163,74,0.85)] transition-all hover:brightness-105 disabled:pointer-events-none disabled:opacity-60"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    Signing in...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <Lock className="h-5 w-5" />
+                    Sign In
+                  </span>
+                )}
+              </Button>
+
+              {loading && <p className="text-center text-sm text-slate-500">Verifying with server...</p>}
+
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-center text-sm text-red-700">{error}</p>
+                </div>
               )}
-            </Button>
-            {loading && (
-              <p className="text-center text-xs text-gray-400">Verifying with server…</p>
-            )}
-            {error && (
-              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-                <p className="text-red-700 text-sm text-center">{error}</p>
+
+              {successMessage && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-center text-sm font-medium text-emerald-700">{successMessage}</p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-4 pt-1">
+                <div className="h-px flex-1 bg-slate-200" />
+                <span className="text-sm text-slate-400">or</span>
+                <div className="h-px flex-1 bg-slate-200" />
               </div>
-            )}
-            {successMessage && (
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
-                <p className="text-emerald-700 text-sm font-medium text-center">{successMessage}</p>
+
+              <div className="grid grid-cols-3 gap-2 text-center text-[13px] text-slate-500">
+                <div className="flex items-center justify-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <span>Secure connection</span>
+                </div>
+                <div className="flex items-center justify-center gap-1.5">
+                  <Lock className="h-4 w-4 text-emerald-600" />
+                  <span>Encrypted</span>
+                </div>
+                <div className="flex items-center justify-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <span>Trusted</span>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <p className="mt-10 text-sm text-slate-400">© 2024 KBL Bites Kitchen. All rights reserved.</p>
+        </div>
       </div>
     );
   }
