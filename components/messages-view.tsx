@@ -34,7 +34,7 @@ interface MessagesResponse {
   has_more: boolean
 }
 
-const PAGE_SIZE = config.dashboard.pageSize || 20
+const PAGE_SIZE = 10
 
 export function MessagesView({ token }: MessagesViewProps) {
   const [messages, setMessages] = useState<Message[]>([])

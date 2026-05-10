@@ -1403,7 +1403,7 @@ ${receiverAddressSection}`;
     if (typeof document !== "undefined" && document.hidden) return;
 
     try {
-      const response = await fetch("/api/messages?limit=50", {
+      const response = await fetch("/api/messages?limit=10", {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",

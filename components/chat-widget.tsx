@@ -122,7 +122,7 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
       setLoading(true)
       setError(null)
 
-      const params = new URLSearchParams({ wa_id: phoneNumber })
+      const params = new URLSearchParams({ wa_id: phoneNumber, limit: "10" })
 
       const response = await fetch(`/api/messages?${params.toString()}`, {
         headers: {
