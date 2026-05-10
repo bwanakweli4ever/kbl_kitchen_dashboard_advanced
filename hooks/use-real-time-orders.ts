@@ -70,6 +70,7 @@ export function useRealTimeOrders({
   const lastOrderIdsRef = useRef<Set<number>>(new Set())
   const previousOrdersRef = useRef<Order[]>([])
   const customerHerePlayedRef = useRef<Set<number>>(new Set())
+  const lastNetworkErrorLogAtRef = useRef(0)
 
   // Play "customer here" sound at kitchen when an order gets customer_here_at set
   const playCustomerHereSound = useCallback(() => {
@@ -133,13 +134,23 @@ export function useRealTimeOrders({
     }
 
     try {
-      const response = await fetch(`/api/orders?limit=${config.dashboard.maxOrders}`, {
-        cache: "no-store",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 25000)
+
+      const response = await (async () => {
+        try {
+          return await fetch(`/api/orders?limit=${config.dashboard.maxOrders}`, {
+            cache: "no-store",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            signal: controller.signal,
+          })
+        } finally {
+          clearTimeout(timeoutId)
+        }
+      })()
 
       if (response.ok) {
         const data = await response.json()
@@ -220,7 +231,14 @@ export function useRealTimeOrders({
         setOrdersOptimized([])
       }
     } catch (err) {
-      console.error("Fetch error:", err)
+      const now = Date.now()
+      const errName = (err as { name?: string })?.name
+      // Network fetch failures can happen during transient backend reconnects.
+      // Log at most once every 30s to avoid flooding the console.
+      if (errName !== "AbortError" && now - lastNetworkErrorLogAtRef.current > 30000) {
+        console.error("Fetch error:", err)
+        lastNetworkErrorLogAtRef.current = now
+      }
       // Don't clear orders on error, just keep existing ones
     } finally {
       // Always set loading to false after fetch

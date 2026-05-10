@@ -91,6 +91,8 @@ export default function KitchenDashboard() {
   const hasInitializedMessageWatcherRef = useRef(false);
   const lastOrderEventRefreshRef = useRef(0);
   const lastMessageEventRefreshRef = useRef(0);
+  const ORDER_EVENT_REFRESH_MIN_MS = 15000;
+  const MESSAGE_EVENT_REFRESH_MIN_MS = 15000;
 
   const [audio] = useState(() => {
     if (typeof window !== 'undefined' && typeof Audio !== 'undefined') {
@@ -147,14 +149,15 @@ export default function KitchenDashboard() {
     token,
     isActive: isAuthenticated && activeTab === "orders"
   });
+  const { triggerNewOrderNotification, triggerNewMessageNotification, markAllAsRead } = notificationSystem;
 
   // Real-time orders hook
   const { orders, loading: ordersLoading, lastFetch, isPolling, refreshOrders } = useRealTimeOrders({
     token,
     isActive: isAuthenticated && activeTab === "orders",
     onNewOrder: useCallback((order: Order) => {
-      notificationSystem.triggerNewOrderNotification(1);
-    }, [notificationSystem.triggerNewOrderNotification]),
+      triggerNewOrderNotification(1);
+    }, [triggerNewOrderNotification]),
     onOrderUpdate: useCallback(() => {}, [])
   });
 
@@ -215,8 +218,8 @@ export default function KitchenDashboard() {
     setUpdatingOrders(new Set());
     setExpandedOrders(new Set());
     setShowMultipleItems(new Set());
-    notificationSystem.markAllAsRead();
-  }, [notificationSystem]);
+    markAllAsRead();
+  }, [markAllAsRead]);
 
   const handleManualRefresh = async () => {
     setRefreshSuccess(false);
@@ -1423,7 +1426,7 @@ ${receiverAddressSection}`;
 
       if (customersToNotify.length > 0 && activeTab !== "messages") {
         const notify = customersToNotify[customersToNotify.length - 1];
-        notificationSystem.triggerNewMessageNotification(1);
+        triggerNewMessageNotification(1);
         setChatWidgetState((prev) => ({
           open: true,
           waId: notify.wa_id,
@@ -1434,7 +1437,7 @@ ${receiverAddressSection}`;
     } catch {
       console.log("Incoming message watcher skipped due to network error");
     }
-  }, [token, isAuthenticated, activeTab, notificationSystem.triggerNewMessageNotification]);
+  }, [token, isAuthenticated, activeTab, triggerNewMessageNotification]);
 
   useEffect(() => {
     if (!token || !isAuthenticated) return;
@@ -1448,17 +1451,17 @@ ${receiverAddressSection}`;
 
   const handleOrderChangedEvent = useCallback(() => {
     const now = Date.now();
-    if (now - lastOrderEventRefreshRef.current < 2000) return;
+    if (now - lastOrderEventRefreshRef.current < ORDER_EVENT_REFRESH_MIN_MS) return;
     lastOrderEventRefreshRef.current = now;
     void refreshOrders(true);
-  }, [refreshOrders]);
+  }, [refreshOrders, ORDER_EVENT_REFRESH_MIN_MS]);
 
   const handleMessageChangedEvent = useCallback(() => {
     const now = Date.now();
-    if (now - lastMessageEventRefreshRef.current < 3000) return;
+    if (now - lastMessageEventRefreshRef.current < MESSAGE_EVENT_REFRESH_MIN_MS) return;
     lastMessageEventRefreshRef.current = now;
     void checkForIncomingMessages();
-  }, [checkForIncomingMessages]);
+  }, [checkForIncomingMessages, MESSAGE_EVENT_REFRESH_MIN_MS]);
 
   const { isConnected: isLiveEventsConnected } = useLiveEvents({
     token,
