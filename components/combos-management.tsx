@@ -41,8 +41,15 @@ interface Ingredient {
   available_as_addon?: boolean;
 }
 
+interface Drink {
+  id: number;
+  display_name: string;
+  price?: number;
+  available?: boolean;
+}
+
 interface ComboItemIn {
-  item_type: "preset" | "ingredient";
+  item_type: "preset" | "ingredient" | "drink";
   item_id: number;
   quantity: number;
   display_label: string;
@@ -106,6 +113,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [drinks, setDrinks] = useState<Drink[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -114,7 +122,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
   const [form, setForm] = useState(emptyForm());
 
   // Item picker state
-  const [pickerType, setPickerType] = useState<"preset" | "ingredient">("preset");
+  const [pickerType, setPickerType] = useState<"preset" | "ingredient" | "drink">("preset");
   const [pickerSearch, setPickerSearch] = useState("");
 
   // ---------------------------------------------------------------------------
@@ -132,19 +140,22 @@ export function CombosManagement({ token }: CombosManagementProps) {
     if (!token) return;
     setLoading(true);
     try {
-      const [combosRes, presetsRes, ingredientsRes] = await Promise.all([
+      const [combosRes, presetsRes, ingredientsRes, drinksRes] = await Promise.all([
         fetch("/api/combos", { headers: headers() }),
         fetch("/api/presets", { headers: headers() }),
         fetch("/api/ingredients?addons_only=false", { headers: headers() }),
+        fetch("/api/drinks", { headers: headers() }),
       ]);
-      const [combosData, presetsData, ingredientsData] = await Promise.all([
+      const [combosData, presetsData, ingredientsData, drinksData] = await Promise.all([
         combosRes.json(),
         presetsRes.json(),
         ingredientsRes.json(),
+        drinksRes.json(),
       ]);
       setCombos(Array.isArray(combosData) ? combosData : []);
       setPresets(Array.isArray(presetsData) ? presetsData : []);
       setIngredients(Array.isArray(ingredientsData) ? ingredientsData : []);
+      setDrinks(Array.isArray(drinksData) ? drinksData : []);
     } catch (e) {
       toast({ title: "Failed to load combos", variant: "destructive" });
     } finally {
@@ -276,11 +287,15 @@ export function CombosManagement({ token }: CombosManagementProps) {
       ? presets.filter((p) =>
           p.display_name.toLowerCase().includes(pickerSearch.toLowerCase())
         )
+      : pickerType === "drink"
+      ? drinks.filter((d) =>
+          d.display_name.toLowerCase().includes(pickerSearch.toLowerCase())
+        )
       : ingredients.filter((i) =>
           i.display_name.toLowerCase().includes(pickerSearch.toLowerCase())
         );
 
-  function addItem(type: "preset" | "ingredient", id: number, name: string, price: number) {
+  function addItem(type: "preset" | "ingredient" | "drink", id: number, name: string, price: number) {
     const alreadyIdx = form.items.findIndex(
       (it) => it.item_type === type && it.item_id === id
     );
@@ -320,6 +335,9 @@ export function CombosManagement({ token }: CombosManagementProps) {
     if (it.item_type === "preset") {
       const p = presets.find((pr) => pr.id === it.item_id);
       return sum + (p?.preset_price ?? p?.product_base_price ?? 0) * it.quantity;
+    } else if (it.item_type === "drink") {
+      const d = drinks.find((dr) => dr.id === it.item_id);
+      return sum + (d?.price ?? 0) * it.quantity;
     } else {
       const i = ingredients.find((ig) => ig.id === it.item_id);
       return sum + (i?.price ?? 0) * it.quantity;
@@ -540,6 +558,8 @@ export function CombosManagement({ token }: CombosManagementProps) {
                     const name =
                       it.item_type === "preset"
                         ? presets.find((p) => p.id === it.item_id)?.display_name ?? `Preset #${it.item_id}`
+                        : it.item_type === "drink"
+                        ? drinks.find((d) => d.id === it.item_id)?.display_name ?? `Drink #${it.item_id}`
                         : ingredients.find((i) => i.id === it.item_id)?.display_name ?? `Ingredient #${it.item_id}`;
                     return (
                       <li
@@ -602,6 +622,16 @@ export function CombosManagement({ token }: CombosManagementProps) {
                 >
                   Ingredients / Add-ons
                 </button>
+                <button
+                  className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                    pickerType === "drink"
+                      ? "bg-orange-500 text-white border-orange-500"
+                      : "bg-white text-gray-600 border-gray-300 hover:border-orange-300"
+                  }`}
+                  onClick={() => setPickerType("drink")}
+                >
+                  Drinks
+                </button>
               </div>
               <Input
                 placeholder={`Search ${pickerType}s…`}
@@ -614,7 +644,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
                   const price =
                     pickerType === "preset"
                       ? ((item as Preset).preset_price ?? (item as Preset).product_base_price ?? 0)
-                      : ((item as Ingredient).price ?? 0);
+                      : ((item as Ingredient | Drink).price ?? 0);
                   return (
                     <button
                       key={item.id}
