@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     const offset = parsedUrl.searchParams.get("offset") || "0"
     const status = parsedUrl.searchParams.get("status")
 
-    let apiUrl = `${config.api.baseUrl}/orders?limit=${limit}&offset=${offset}`
+    let apiUrl = `${config.api.baseUrl}/orders/?limit=${limit}&offset=${offset}`
     if (status) {
       apiUrl += `&status=${status}`
     }

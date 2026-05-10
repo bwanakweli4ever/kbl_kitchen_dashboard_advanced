@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     
     try {
       // Make an authenticated request to test the token
-      const response = await fetch(`${config.api.baseUrl}/orders?limit=1`, {
+      const response = await fetch(`${config.api.baseUrl}/orders/?limit=1`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
