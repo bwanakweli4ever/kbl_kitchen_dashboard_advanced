@@ -43,6 +43,7 @@ export function MessagesView({ token }: MessagesViewProps) {
   const [hasMore, setHasMore] = useState(false)
   const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(0)
+  const [visibleConversationCount, setVisibleConversationCount] = useState(PAGE_SIZE)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState<string>("all")
@@ -144,6 +145,7 @@ export function MessagesView({ token }: MessagesViewProps) {
     setHasMore(false)
     setCurrentPage(0)
     setTotalCount(0)
+    setVisibleConversationCount(PAGE_SIZE)
     setError(null)
 
     const debounce = setTimeout(() => {
@@ -247,7 +249,15 @@ export function MessagesView({ token }: MessagesViewProps) {
     )
   }, [groupedMessages])
 
-  const loadedCount = messages.length
+  useEffect(() => {
+    setVisibleConversationCount(PAGE_SIZE)
+  }, [searchTerm, filterType, conversationList.length])
+
+  const visibleConversationList = useMemo(() => {
+    return conversationList.slice(0, visibleConversationCount)
+  }, [conversationList, visibleConversationCount])
+
+  const loadedCount = visibleConversationList.length
 
   if (loading && messages.length === 0) {
     return (
@@ -265,7 +275,7 @@ export function MessagesView({ token }: MessagesViewProps) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-green-600">Message Center</h2>
-          <p className="text-gray-600">{conversationList.length} conversations loaded</p>
+          <p className="text-gray-600">{loadedCount} of {conversationList.length} conversations loaded</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={exportToCSV} variant="outline" className="flex items-center gap-2 bg-transparent">
@@ -327,7 +337,7 @@ export function MessagesView({ token }: MessagesViewProps) {
       )}
 
       <div className="space-y-4">
-        {conversationList.map((conversation) => (
+        {visibleConversationList.map((conversation) => (
           <Card key={conversation.customer.wa_id} className="shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -393,11 +403,11 @@ export function MessagesView({ token }: MessagesViewProps) {
       </div>
 
       <LoadMoreButton
-        onClick={() => void fetchMessagesPage(currentPage + 1, false)}
+        onClick={() => setVisibleConversationCount((current) => current + PAGE_SIZE)}
         loading={loadingMore}
-        hasMore={hasMore}
+        hasMore={visibleConversationCount < conversationList.length}
         currentCount={loadedCount}
-        totalCount={totalCount || loadedCount}
+        totalCount={conversationList.length || totalCount || loadedCount}
         disabled={!!error}
       />
     </div>
