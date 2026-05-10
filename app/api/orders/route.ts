@@ -6,8 +6,10 @@ export const runtime = "nodejs"
 
 // Very generous rate limiting for kitchen display
 const requestTracker = new Map<string, { count: number; firstRequest: number }>()
+const lastSuccessfulOrders = new Map<string, { data: { orders: any[]; count: number; total_count: number }; at: number }>()
 const RATE_LIMIT_WINDOW = 300000 // 5 minutes
 const MAX_REQUESTS_PER_WINDOW = 50 // Very generous
+const STALE_CACHE_TTL_MS = 120000 // 2 minutes
 
 // Clean up old entries
 setInterval(() => {
@@ -29,9 +31,9 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authorization.replace("Bearer ", "")
+    const clientId = token.substring(0, 10)
 
     // Track requests but be very generous
-    const clientId = token.substring(0, 10)
     const now = Date.now()
     const clientData = requestTracker.get(clientId)
 
@@ -68,17 +70,21 @@ export async function GET(request: NextRequest) {
     }
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), config.api.timeout)
+    const timeoutId = setTimeout(() => controller.abort(), Math.max(12000, config.api.timeout))
 
-    const response = await fetch(apiUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeoutId)
+    let response: Response
+    try {
+      response = await fetch(apiUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeoutId)
+    }
 
     if (response.ok) {
       const responseText = await response.text()
@@ -98,13 +104,34 @@ export async function GET(request: NextRequest) {
         total_count: data.total_count || data.count || 0,
       }
 
+      // Keep a short-lived per-client cache to absorb transient backend resets.
+      lastSuccessfulOrders.set(clientId, { data: responseData, at: Date.now() })
+
       return NextResponse.json(responseData)
     } else {
+      const cached = lastSuccessfulOrders.get(clientId)
+      if (cached && Date.now() - cached.at <= STALE_CACHE_TTL_MS) {
+        return NextResponse.json(cached.data)
+      }
       // Return empty data instead of errors for kitchen display
       return NextResponse.json({ orders: [], count: 0, total_count: 0 })
     }
   } catch (error) {
-    console.error("API route error:", error)
+    if ((error as any)?.name === "AbortError") {
+      console.warn("Orders upstream timeout; serving fallback data")
+    } else {
+      console.error("API route error:", error)
+    }
+
+    const authHeader = request.headers.get("authorization")
+    const token = authHeader?.replace("Bearer ", "")
+    const clientId = token?.substring(0, 10)
+    if (clientId) {
+      const cached = lastSuccessfulOrders.get(clientId)
+      if (cached && Date.now() - cached.at <= STALE_CACHE_TTL_MS) {
+        return NextResponse.json(cached.data)
+      }
+    }
     // Always return empty data instead of errors for kitchen display
     return NextResponse.json({ orders: [], count: 0, total_count: 0 })
   }

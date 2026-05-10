@@ -133,10 +133,8 @@ export function useRealTimeOrders({
     }
 
     try {
-      // Show loading for all fetches
-      setLoading(true)
-
       const response = await fetch(`/api/orders?limit=${config.dashboard.maxOrders}`, {
+        cache: "no-store",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -157,35 +155,6 @@ export function useRealTimeOrders({
           return
         }
         
-        // Debug: Log rider information in fetched orders
-        const ordersWithRiders = ordersArray.filter((o: any) => o.rider_name || o.rider_phone)
-        if (ordersWithRiders.length > 0) {
-          console.log(`🚴 RIDER DATA FETCHED - Found ${ordersWithRiders.length} orders with riders:`);
-          ordersWithRiders.forEach((o: any) => {
-            console.log(`   Order #${o.id}:`, {
-              rider_name: o.rider_name || 'MISSING',
-              rider_phone: o.rider_phone || 'MISSING',
-              rider_assigned_at: o.rider_assigned_at || 'MISSING'
-            });
-          });
-        } else {
-          console.log(`📦 No orders with rider data found in ${ordersArray.length} orders`);
-        }
-        
-        // Debug: Log all orders to check if rider fields are present
-        if (ordersArray.length > 0) {
-          const sampleOrder = ordersArray[0];
-          const hasRiderFields = 'rider_name' in sampleOrder && 'rider_phone' in sampleOrder;
-          console.log(`📦 Fetched ${ordersArray.length} orders. Rider fields present: ${hasRiderFields}`);
-          if (hasRiderFields) {
-            console.log(`   Sample order #${sampleOrder.id} rider data:`, {
-              rider_name: sampleOrder.rider_name,
-              rider_phone: sampleOrder.rider_phone,
-              rider_assigned_at: sampleOrder.rider_assigned_at
-            });
-          }
-        }
-
         if (ordersArray.length > 0) {
           // Filter for active orders and sort by completeness and creation time
           const activeOrders = ordersArray

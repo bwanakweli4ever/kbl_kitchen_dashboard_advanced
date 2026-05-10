@@ -148,10 +148,10 @@ export default function KitchenDashboard() {
   // Real-time orders hook
   const { orders, loading: ordersLoading, lastFetch, isPolling, refreshOrders } = useRealTimeOrders({
     token,
-    isActive: true,
+    isActive: isAuthenticated && activeTab === "orders",
     onNewOrder: useCallback((order: Order) => {
       notificationSystem.triggerNewOrderNotification(1);
-    }, [notificationSystem]),
+    }, [notificationSystem.triggerNewOrderNotification]),
     onOrderUpdate: useCallback(() => {}, [])
   });
 
@@ -203,7 +203,7 @@ export default function KitchenDashboard() {
   }, []);
 
   // Define handleLogout early so it can be used in useEffect
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("kitchen_token");
     localStorage.removeItem("kitchen_token_timestamp");
     setToken(null);
@@ -213,7 +213,7 @@ export default function KitchenDashboard() {
     setExpandedOrders(new Set());
     setShowMultipleItems(new Set());
     notificationSystem.markAllAsRead();
-  };
+  }, [notificationSystem]);
 
   const handleManualRefresh = async () => {
     setRefreshSuccess(false);
@@ -1375,9 +1375,11 @@ ${receiverAddressSection}`;
   useEffect(() => {
     if (!token || !isAuthenticated) return;
 
-    let isCancelled = false;
-
     const checkForIncomingMessages = async () => {
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+
       try {
         const response = await fetch("/api/messages?limit=50", {
           headers: {
@@ -1413,11 +1415,6 @@ ${receiverAddressSection}`;
         // Only show popup for customers with unseen inbound messages
         // Batch notifications: only one per customer per poll, and only if chat not open
         const customersToNotify: { wa_id: string; profile_name: string; messageKey: string }[] = [];
-        // Track open chats per customer
-        const openChatsByCustomerRef = useRef<Record<string, boolean>>({});
-        if (chatWidgetState && chatWidgetState.waId && chatWidgetState.open) {
-          openChatsByCustomerRef.current[chatWidgetState.waId] = true;
-        }
         for (const inbound of inboundMessages) {
           const customerKey = inbound.wa_id;
           const messageKey = `${inbound.wa_id}-${inbound.created_at}-${inbound.body}`;
@@ -1447,12 +1444,11 @@ ${receiverAddressSection}`;
       }
     };
     checkForIncomingMessages();
-    const interval = setInterval(checkForIncomingMessages, 5000);
+    const interval = setInterval(checkForIncomingMessages, 30000);
     return () => {
-      isCancelled = true;
       clearInterval(interval);
     };
-  }, [token, isAuthenticated, notificationSystem.triggerNewMessageNotification]);
+  }, [token, isAuthenticated, activeTab, chatWidgetState, notificationSystem.triggerNewMessageNotification]);
 
 
   if (!isAuthenticated) {
