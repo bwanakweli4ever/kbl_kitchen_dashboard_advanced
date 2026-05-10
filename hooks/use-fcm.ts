@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getFcmTokenAndRegister } from "@/lib/firebase";
-import { getApiUrl } from "@/lib/config";
 
 /**
  * Register FCM token with backend for kitchen web push.
@@ -21,7 +20,7 @@ export function useFcm() {
       }
       setToken(fcmToken);
       setError(null);
-      await fetch(getApiUrl("api/device-tokens"), {
+      await fetch("/api/device-tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
