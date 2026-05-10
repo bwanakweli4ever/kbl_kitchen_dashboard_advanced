@@ -24,6 +24,22 @@ interface CustomersTableViewProps {
   token: string | null
 }
 
+function isWeakCustomerName(value: string | null | undefined) {
+  const normalized = (value || "").trim().toLowerCase()
+  return !normalized || normalized === "unknown customer" || normalized === "customer"
+}
+
+function resolveCustomerName(customer: any) {
+  const candidates = [
+    customer?.profile_name,
+    customer?.customer_name,
+    customer?.user_name,
+    customer?.name,
+  ]
+  const strong = candidates.find((name) => !isWeakCustomerName(name))
+  return (strong || customer?.profile_name || customer?.customer_name || customer?.user_name || "Unknown Customer").toString().trim()
+}
+
 export function CustomersTableView({ token }: CustomersTableViewProps) {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,7 +68,7 @@ export function CustomersTableView({ token }: CustomersTableViewProps) {
       if (response.ok) {
         const processedCustomers = (data.customers || []).map((customer: any) => ({
           wa_id: customer.wa_id || "N/A",
-          profile_name: customer.profile_name || "Unknown Customer",
+          profile_name: resolveCustomerName(customer),
           total_orders: customer.total_orders || 0,
           total_spent: customer.total_spent || 0,
           last_order_date: customer.last_order_date || new Date().toISOString(),

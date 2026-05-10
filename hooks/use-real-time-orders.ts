@@ -3,6 +3,17 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { config } from "@/lib/config"
 
+function isWeakCustomerName(value: string | null | undefined) {
+  const normalized = (value || "").trim().toLowerCase()
+  return !normalized || normalized === "unknown customer" || normalized === "customer"
+}
+
+function resolveOrderCustomerName(order: any) {
+  const candidates = [order?.profile_name, order?.customer_name, order?.user_name, order?.name]
+  const strong = candidates.find((name) => !isWeakCustomerName(name))
+  return (strong || order?.profile_name || order?.customer_name || order?.user_name || "Unknown Customer").toString().trim()
+}
+
 export interface Order {
   id: number
   wa_id: string
@@ -167,8 +178,26 @@ export function useRealTimeOrders({
         }
         
         if (ordersArray.length > 0) {
+          const normalizedOrders = ordersArray.map((order: any) => ({
+            ...order,
+            profile_name: resolveOrderCustomerName(order),
+          }))
+
+          const bestNameByWaId = new Map<string, string>()
+          for (const order of normalizedOrders) {
+            const waId = (order?.wa_id || "").toString()
+            if (!waId || isWeakCustomerName(order?.profile_name)) continue
+            if (!bestNameByWaId.has(waId)) bestNameByWaId.set(waId, order.profile_name)
+          }
+
+          const nameNormalizedOrders = normalizedOrders.map((order: any) => {
+            if (!isWeakCustomerName(order?.profile_name)) return order
+            const bestName = bestNameByWaId.get((order?.wa_id || "").toString())
+            return bestName ? { ...order, profile_name: bestName } : order
+          })
+
           // Filter for active orders and sort by completeness and creation time
-          const activeOrders = ordersArray
+          const activeOrders = nameNormalizedOrders
             .filter((order: Order) => {
               const isActive = order.status && 
                 !['delivered', 'cancelled'].includes(order.status.toLowerCase())
