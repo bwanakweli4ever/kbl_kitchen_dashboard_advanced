@@ -78,6 +78,7 @@ export default function KitchenDashboard() {
   type CouponVerifyState = {
     status: "idle" | "loading" | "valid" | "invalid";
     verifiedDiscount?: number;
+    discount_percentage?: number;
     error?: string;
     checkedAt?: number;
     cooldownUntil?: number;
@@ -335,6 +336,7 @@ export default function KitchenDashboard() {
       const data = await response.json().catch(() => ({}));
       const isValid = response.ok && (data?.verified === true || data?.valid === true);
       const verifiedDiscount = Number(data?.discount_amount || 0);
+      const discountPercentage = Number(data?.discount_percentage || 0);
 
       if (response.status === 429) {
         setCouponVerifyByOrder((prev) => ({
@@ -352,7 +354,7 @@ export default function KitchenDashboard() {
       if (isValid && verifiedDiscount > 0) {
         setCouponVerifyByOrder((prev) => ({
           ...prev,
-          [order.id]: { status: "valid", verifiedDiscount, checkedAt: now },
+          [order.id]: { status: "valid", verifiedDiscount, discount_percentage: discountPercentage, checkedAt: now },
         }));
       } else {
         setCouponVerifyByOrder((prev) => ({
@@ -1967,11 +1969,21 @@ ${receiverAddressSection}`;
                               {appliedCouponAmount > 0 && (
                                 <div className="text-[11px] sm:text-xs font-semibold text-amber-800 mt-1">
                                   Applied Coupon Discount: -{formatCurrency(appliedCouponAmount)}
+                                  {couponVerifyByOrder[order.id]?.discount_percentage && (
+                                    <span className="ml-1 text-amber-700">
+                                      ({Number(couponVerifyByOrder[order.id].discount_percentage).toFixed(1)}%)
+                                    </span>
+                                  )}
                                 </div>
                               )}
                               {pricing.hasVerifiedDiscount && (
                                 <div className="text-[11px] sm:text-xs font-semibold text-emerald-700 mt-1">
                                   Applied Amount: -{formatCurrency(pricing.appliedDiscount)}
+                                  {couponVerifyByOrder[order.id]?.discount_percentage && (
+                                    <span className="ml-1 text-emerald-600">
+                                      ({Number(couponVerifyByOrder[order.id].discount_percentage).toFixed(1)}%)
+                                    </span>
+                                  )}
                                 </div>
                               )}
                               {pricing.hasLoyaltyDiscount && (
@@ -2126,11 +2138,17 @@ ${receiverAddressSection}`;
                                   -{Math.round(getOrderPricingBreakdown(order).loyaltyDiscount).toLocaleString()} RWF off
                                 </span>
                               )}
-                              {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (
-                                <span className="ml-2 text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded px-1.5 py-0.5">
-                                  Verified: -{Math.round(couponVerifyByOrder[order.id].verifiedDiscount || 0).toLocaleString()} RWF
-                                </span>
-                              )}
+                              {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (() => {
+                                const verified = couponVerifyByOrder[order.id];
+                                const discountPct = verified?.discount_percentage ? ` (${Number(verified.discount_percentage).toFixed(1)}%)` : '';
+                                return (
+                                  <>
+                                    <span className="ml-2 text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded px-1.5 py-0.5">
+                                      Verified: -{Math.round(verified.verifiedDiscount || 0).toLocaleString()} RWF{discountPct}
+                                    </span>
+                                  </>
+                                );
+                              })()}
                               {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (
                                 <div className="mt-1 text-xs font-semibold text-emerald-800">
                                   Payable Total: {formatCurrency(Math.max(calculateOrderTotal(order) - Number(couponVerifyByOrder[order.id]?.verifiedDiscount || 0), 0))}
