@@ -90,10 +90,8 @@ function slugify(s: string) {
   return s
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_")
-      // Map "drink" to "ingredient" for backend compatibility (backend only accepts preset/ingredient)
-      const backendType: "preset" | "ingredient" = type === "drink" ? "ingredient" : type;
     .replace(/^_+|_+$/g, "");
-        (it) => it.item_type === backendType && it.item_id === id
+}
 
 function getImageUrl(imageUrl?: string | null) {
   if (!imageUrl) return "";
@@ -105,7 +103,7 @@ function getImageUrl(imageUrl?: string | null) {
     return `${imageBaseUrl}${imageUrl}`;
   }
   return imageUrl;
-          item_type: backendType,
+}
 
 const emptyForm = () => ({
   name: "",
@@ -311,8 +309,9 @@ export function CombosManagement({ token }: CombosManagementProps) {
         );
 
   function addItem(type: "preset" | "ingredient" | "drink", id: number, name: string, price: number) {
+    const backendType: "preset" | "ingredient" = type === "drink" ? "ingredient" : type;
     const alreadyIdx = form.items.findIndex(
-      (it) => it.item_type === type && it.item_id === id
+      (it) => it.item_type === backendType && it.item_id === id
     );
     if (alreadyIdx >= 0) {
       // increment quantity
@@ -324,7 +323,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
       setForm((f) => ({ ...f, items: updated }));
     } else {
       const newItem: ComboItemIn = {
-        item_type: type,
+        item_type: backendType,
         item_id: id,
         quantity: 1,
         display_label: name,
