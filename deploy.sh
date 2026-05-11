@@ -38,10 +38,13 @@ fi
 
 ./node_modules/.bin/next build
 
+echo "🔄 Restarting PM2 process..."
+
+pm2 restart kbl-kitchen-dashboard --update-env || pm2 restart KBL-DASHBOARD --update-env
+
 echo "✅ Deployment completed successfully!"
 echo ""
 echo "To start the application, run:"
 echo "  npm start"
 echo ""
-echo "Or if using PM2:"
-echo "  pm2 restart kbl-kitchen-dashboard"
+echo "PM2 restart attempted automatically."
