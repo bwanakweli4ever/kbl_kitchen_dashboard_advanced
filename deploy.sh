@@ -26,7 +26,7 @@ npm cache clean --force
 echo "📥 Installing dependencies..."
 
 # Install dependencies with legacy peer deps (required for React 19 compatibility)
-npm install --legacy-peer-deps
+npm install --legacy-peer-deps --no-audit --no-fund
 
 echo "🔨 Building Next.js application..."
 
