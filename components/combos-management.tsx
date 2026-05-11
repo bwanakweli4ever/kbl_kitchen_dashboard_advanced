@@ -93,6 +93,18 @@ function slugify(s: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+function getImageUrl(imageUrl?: string | null) {
+  if (!imageUrl) return "";
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+    return imageUrl;
+  }
+  if (imageUrl.startsWith("/")) {
+    const imageBaseUrl = process.env.NEXT_PUBLIC_IMAGE_BASE_URL || "https://kblbites.com";
+    return `${imageBaseUrl}${imageUrl}`;
+  }
+  return imageUrl;
+}
+
 const emptyForm = () => ({
   name: "",
   display_name: "",
@@ -221,6 +233,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
       const payload = {
         ...form,
         name: form.name || slugify(form.display_name),
+        image_url: form.image_url.trim() || undefined,
       };
 
       let res: Response;
@@ -387,6 +400,19 @@ export function CombosManagement({ token }: CombosManagementProps) {
             const saving = combo.a_la_carte_total - combo.combo_price;
             return (
               <Card key={combo.id} className="relative flex flex-col">
+                {combo.image_url && (
+                  <div className="h-36 overflow-hidden border-b bg-gray-50 rounded-t-xl">
+                    <img
+                      src={getImageUrl(combo.image_url)}
+                      alt={combo.display_name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.style.display = "none";
+                      }}
+                    />
+                  </div>
+                )}
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -504,6 +530,34 @@ export function CombosManagement({ token }: CombosManagementProps) {
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
+            </div>
+
+            <div className="space-y-1">
+              <Label>Image URL</Label>
+              <Input
+                placeholder="https://kblbites.com/images/combo-ultimate.jpg"
+                value={form.image_url}
+                onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Use a full URL or website path like /images/combo-ultimate.jpg.
+              </p>
+              {form.image_url.trim() && (
+                <div className="mt-2 rounded-md border bg-gray-50 overflow-hidden">
+                  <img
+                    src={getImageUrl(form.image_url.trim())}
+                    alt="Combo preview"
+                    className="w-full h-40 object-cover"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      target.style.display = "none";
+                    }}
+                  />
+                  <div className="px-2 py-1 text-[11px] text-gray-500 break-all">
+                    {getImageUrl(form.image_url.trim())}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
