@@ -42,6 +42,34 @@ const SUPPORT_KEYWORDS = [
   "urgent",
 ]
 
+const QUICK_MESSAGES = [
+  {
+    id: "payment-reminder",
+    label: "Payment Reminder",
+    text: "Hello! This is a friendly reminder that payment for your order is still pending. Please complete payment so we can proceed quickly. Thank you!",
+  },
+  {
+    id: "payment-confirm",
+    label: "Payment Confirmed",
+    text: "Thank you. We have received your payment and your order is now being prepared.",
+  },
+  {
+    id: "feedback-request",
+    label: "Ask Feedback",
+    text: "Thank you for ordering with KBL Bites. We would love your feedback about your experience today.",
+  },
+  {
+    id: "delay-update",
+    label: "Delay Update",
+    text: "Apologies for the delay. Your order is being finalized and will be with you shortly. Thank you for your patience.",
+  },
+  {
+    id: "ready-pickup",
+    label: "Ready for Pickup",
+    text: "Your order is ready for pickup. Please collect it at your convenience. Thank you!",
+  },
+] as const
+
 const normalizeWaId = (value?: string | null) => (value || "").replace(/[^\d]/g, "")
 
 export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId, onNewMessage, defaultOpen = false, open: controlledOpen, onOpenChange }: ChatWidgetProps) {
@@ -102,6 +130,11 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
     if (!inputRef.current) return
     inputRef.current.style.height = "auto"
     inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 140)}px`
+  }
+
+  const applyQuickMessage = (text: string) => {
+    handleMessageInputChange(text)
+    setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   const scrollToBottom = () => {
@@ -651,6 +684,22 @@ export function ChatWidget({ customerName, phoneNumber, token, trigger, orderId,
 
             {/* Message Input */}
             <div className="p-3 sm:p-4 border-t bg-white/95 backdrop-blur sticky bottom-0" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+              {/* Quick Messages */}
+              <div className="mb-2.5 flex flex-wrap gap-1.5">
+                {QUICK_MESSAGES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => applyQuickMessage(template.text)}
+                    className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+                    disabled={sending}
+                    title={template.text}
+                  >
+                    {template.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex gap-2 items-end">
                 {/* Text Input */}
                 <div className="flex-1">
