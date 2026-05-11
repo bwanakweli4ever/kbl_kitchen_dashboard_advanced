@@ -1945,48 +1945,13 @@ ${receiverAddressSection}`;
                           <div className="text-right">
                               {(() => {
                                 const pricing = getVerifiedPricingBreakdown(order);
-                                const storedCouponDiscount = Number(order.coupon_discount_amount ?? 0);
-                                const appliedCouponAmount =
-                                  Number.isFinite(storedCouponDiscount) && storedCouponDiscount > 0
-                                    ? storedCouponDiscount
-                                    : order.coupon_code && pricing.loyaltyDiscount > 0
-                                      ? pricing.loyaltyDiscount
-                                      : 0;
                                 return (
                                   <>
                               <div className="text-lg sm:text-xl md:text-2xl font-bold text-green-600">
                               {formatCurrency(pricing.hasVerifiedDiscount ? pricing.verifiedPayableTotal : pricing.payableTotal)}
                             </div>
                               <div className="text-xs sm:text-sm text-gray-500">Payable Total</div>
-                              {order.coupon_code && (
-                                <div className="mt-2 flex justify-end">
-                                  <Badge className="bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 text-[11px] sm:text-xs font-semibold">
-                                    <span className="mr-1">🏷️</span>
-                                    Applied Coupon: {order.coupon_code}
-                                  </Badge>
-                                </div>
-                              )}
-                              {appliedCouponAmount > 0 && (
-                                <div className="text-[11px] sm:text-xs font-semibold text-amber-800 mt-1">
-                                  Applied Coupon Discount: -{formatCurrency(appliedCouponAmount)}
-                                  {couponVerifyByOrder[order.id]?.discount_percentage && (
-                                    <span className="ml-1 text-amber-700">
-                                      ({Number(couponVerifyByOrder[order.id].discount_percentage).toFixed(1)}%)
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {pricing.hasVerifiedDiscount && (
-                                <div className="text-[11px] sm:text-xs font-semibold text-emerald-700 mt-1">
-                                  Applied Amount: -{formatCurrency(pricing.appliedDiscount)}
-                                  {couponVerifyByOrder[order.id]?.discount_percentage && (
-                                    <span className="ml-1 text-emerald-600">
-                                      ({Number(couponVerifyByOrder[order.id].discount_percentage).toFixed(1)}%)
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {pricing.hasLoyaltyDiscount && (
+                              {pricing.hasLoyaltyDiscount && !order.coupon_code && (
                                 <div className="mt-2 rounded-md border border-green-200 bg-green-50 px-2 py-1.5 text-right">
                                   <div className="text-xs text-gray-700">Subtotal: {formatCurrency(pricing.subtotal)}</div>
                                   <div className="text-xs font-semibold text-red-600">Loyalty Discount: -{formatCurrency(pricing.loyaltyDiscount)}</div>
@@ -2126,34 +2091,20 @@ ${receiverAddressSection}`;
                           <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg">
                             <span className="text-base">🏷️</span>
                             <div className="flex-1 min-w-0">
-                              <span className="font-semibold text-amber-900 text-sm">Applied Coupon: </span>
-                              <span className="font-mono font-bold text-amber-800 tracking-wider text-sm">{order.coupon_code}</span>
-                              {order.coupon_discount_amount != null && order.coupon_discount_amount > 0 && (
-                                <span className="ml-2 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-1.5 py-0.5">
-                                  -{order.coupon_discount_amount.toLocaleString()} RWF off
-                                </span>
-                              )}
-                              {!(order.coupon_discount_amount != null && order.coupon_discount_amount > 0) && getOrderPricingBreakdown(order).loyaltyDiscount > 0 && (
-                                <span className="ml-2 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-1.5 py-0.5">
-                                  -{Math.round(getOrderPricingBreakdown(order).loyaltyDiscount).toLocaleString()} RWF off
-                                </span>
-                              )}
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-amber-900 text-sm">Coupon:</span>
+                                <span className="font-mono font-bold text-amber-800 tracking-wider text-sm">{order.coupon_code}</span>
+                              </div>
                               {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (() => {
                                 const verified = couponVerifyByOrder[order.id];
-                                const discountPct = verified?.discount_percentage ? ` (${Number(verified.discount_percentage).toFixed(1)}%)` : '';
+                                const pct = verified?.discount_percentage || 0;
                                 return (
-                                  <>
-                                    <span className="ml-2 text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded px-1.5 py-0.5">
-                                      Verified: -{Math.round(verified.verifiedDiscount || 0).toLocaleString()} RWF{discountPct}
-                                    </span>
-                                  </>
+                                  <div className="mt-1.5 text-xs font-semibold text-emerald-800">
+                                    <div>Discount: -{Math.round(verified.verifiedDiscount || 0).toLocaleString()} RWF ({Number(pct).toFixed(1)}%)</div>
+                                    <div className="mt-0.5 text-emerald-700">Final: {formatCurrency(Math.max(calculateOrderTotal(order) - Number(verified.verifiedDiscount || 0), 0))}</div>
+                                  </div>
                                 );
                               })()}
-                              {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (
-                                <div className="mt-1 text-xs font-semibold text-emerald-800">
-                                  Payable Total: {formatCurrency(Math.max(calculateOrderTotal(order) - Number(couponVerifyByOrder[order.id]?.verifiedDiscount || 0), 0))}
-                                </div>
-                              )}
                               {couponVerifyByOrder[order.id]?.status === "invalid" && couponVerifyByOrder[order.id]?.error && (
                                 <div className="mt-1 text-xs font-medium text-red-700">
                                   {couponVerifyByOrder[order.id]?.error}
