@@ -100,6 +100,20 @@ function slugify(s: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+function normalizeComboItemType(itemType: string): "preset" | "ingredient" | "drink" | "product" {
+  const key = itemType.trim().toLowerCase();
+  if (key === "child_product" || key === "child-product" || key === "childproduct" || key === "product_child") {
+    return "product";
+  }
+  if (key === "addon" || key === "add-on" || key === "add_on") {
+    return "ingredient";
+  }
+  if (key === "preset" || key === "ingredient" || key === "drink" || key === "product") {
+    return key;
+  }
+  return "ingredient";
+}
+
 function getImageUrl(imageUrl?: string | null) {
   if (!imageUrl) return "";
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
@@ -241,11 +255,30 @@ export function CombosManagement({ token }: CombosManagementProps) {
 
     setSaving(true);
     try {
-      const payload = {
-        ...form,
-        name: form.name || slugify(form.display_name),
+      const normalizedItems = form.items.map((item, index) => ({
+        item_type: normalizeComboItemType(item.item_type),
+        item_id: Number(item.item_id),
+        quantity: Math.max(1, Number(item.quantity) || 1),
+        display_label: item.display_label?.trim() || undefined,
+        sort_order: Number.isFinite(item.sort_order) ? item.sort_order : index,
+      }));
+
+      const payloadBase = {
+        display_name: form.display_name.trim(),
+        description: form.description.trim() || undefined,
         image_url: form.image_url.trim() || undefined,
+        combo_price: Number(form.combo_price),
+        available: Boolean(form.available),
+        sort_order: Number(form.sort_order) || 0,
+        items: normalizedItems,
       };
+
+      const payload = editingCombo
+        ? payloadBase
+        : {
+            ...payloadBase,
+            name: (form.name || slugify(form.display_name)).trim(),
+          };
 
       let res: Response;
       if (editingCombo) {
@@ -264,7 +297,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail ?? res.statusText);
+        throw new Error(err.detail ?? err.error ?? res.statusText);
       }
 
       toast({ title: editingCombo ? "Combo updated" : "Combo created" });
