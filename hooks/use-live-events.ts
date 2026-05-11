@@ -43,7 +43,10 @@ export function useLiveEvents({ token, isActive, onOrderChanged, onMessageChange
   useEffect(() => {
     stoppedRef.current = false
     let abortController: AbortController | null = null
-    let reconnectDelayMs = 2000
+    let reconnectDelayMs = 10000
+    const MIN_RECONNECT_MS = 10000
+    const MAX_RECONNECT_MS = 60000
+    const STABLE_CONNECTION_MS = 15000
 
     const clearReconnect = () => {
       if (reconnectTimerRef.current) {
@@ -59,7 +62,7 @@ export function useLiveEvents({ token, isActive, onOrderChanged, onMessageChange
           void connect()
         }
       }, reconnectDelayMs)
-      reconnectDelayMs = Math.min(reconnectDelayMs * 2, 15000)
+      reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_MS)
     }
 
     const connect = async () => {
@@ -85,7 +88,7 @@ export function useLiveEvents({ token, isActive, onOrderChanged, onMessageChange
         }
 
         setIsConnected(true)
-        reconnectDelayMs = 2000
+        const connectedAt = Date.now()
 
         const reader = response.body.getReader()
         const decoder = new TextDecoder("utf-8")
@@ -102,6 +105,11 @@ export function useLiveEvents({ token, isActive, onOrderChanged, onMessageChange
           for (const part of parts) {
             parseSseChunk(part + "\n\n", onOrderChanged, onMessageChanged)
           }
+        }
+
+        // Reset to minimum reconnect delay only after a stable-lived stream.
+        if (Date.now() - connectedAt >= STABLE_CONNECTION_MS) {
+          reconnectDelayMs = MIN_RECONNECT_MS
         }
 
         setIsConnected(false)

@@ -1496,16 +1496,6 @@ ${receiverAddressSection}`;
     }
   }, [token, isAuthenticated, activeTab, triggerNewMessageNotification]);
 
-  useEffect(() => {
-    if (!token || !isAuthenticated) return;
-
-    checkForIncomingMessages();
-    const interval = setInterval(checkForIncomingMessages, 30000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [token, isAuthenticated, checkForIncomingMessages]);
-
   const handleOrderChangedEvent = useCallback(() => {
     const now = Date.now();
     if (now - lastOrderEventRefreshRef.current < ORDER_EVENT_REFRESH_MIN_MS) return;
@@ -1526,6 +1516,19 @@ ${receiverAddressSection}`;
     onOrderChanged: handleOrderChangedEvent,
     onMessageChanged: handleMessageChangedEvent,
   });
+
+  useEffect(() => {
+    if (!token || !isAuthenticated) return;
+
+    checkForIncomingMessages();
+
+    // Keep fallback polling, but back off when SSE live-events is healthy.
+    const intervalMs = isLiveEventsConnected ? 120000 : 30000;
+    const interval = setInterval(checkForIncomingMessages, intervalMs);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [token, isAuthenticated, isLiveEventsConnected, checkForIncomingMessages]);
 
 
   if (!isAuthenticated) {
@@ -1938,6 +1941,14 @@ ${receiverAddressSection}`;
                               {formatCurrency(pricing.hasVerifiedDiscount ? pricing.verifiedPayableTotal : pricing.payableTotal)}
                             </div>
                               <div className="text-xs sm:text-sm text-gray-500">Payable Total</div>
+                              {order.coupon_code && (
+                                <div className="mt-2 flex justify-end">
+                                  <Badge className="bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 text-[11px] sm:text-xs font-semibold">
+                                    <span className="mr-1">🏷️</span>
+                                    Coupon: {order.coupon_code}
+                                  </Badge>
+                                </div>
+                              )}
                               {pricing.hasVerifiedDiscount && (
                                 <div className="text-[11px] sm:text-xs font-semibold text-emerald-700 mt-1">
                                   Applied Amount: -{formatCurrency(pricing.appliedDiscount)}
