@@ -39,6 +39,16 @@ export function useLiveEvents({ token, isActive, onOrderChanged, onMessageChange
   const [isConnected, setIsConnected] = useState(false)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stoppedRef = useRef(false)
+  const onOrderChangedRef = useRef<typeof onOrderChanged>(onOrderChanged)
+  const onMessageChangedRef = useRef<typeof onMessageChanged>(onMessageChanged)
+
+  useEffect(() => {
+    onOrderChangedRef.current = onOrderChanged
+  }, [onOrderChanged])
+
+  useEffect(() => {
+    onMessageChangedRef.current = onMessageChanged
+  }, [onMessageChanged])
 
   useEffect(() => {
     stoppedRef.current = false
@@ -103,7 +113,7 @@ export function useLiveEvents({ token, isActive, onOrderChanged, onMessageChange
           buffer = parts.pop() || ""
 
           for (const part of parts) {
-            parseSseChunk(part + "\n\n", onOrderChanged, onMessageChanged)
+            parseSseChunk(part + "\n\n", onOrderChangedRef.current, onMessageChangedRef.current)
           }
         }
 
@@ -136,7 +146,7 @@ export function useLiveEvents({ token, isActive, onOrderChanged, onMessageChange
         abortController.abort()
       }
     }
-  }, [token, isActive, onOrderChanged, onMessageChanged])
+  }, [token, isActive])
 
   return { isConnected }
 }
