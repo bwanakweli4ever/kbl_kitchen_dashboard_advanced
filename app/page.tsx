@@ -47,6 +47,7 @@ import {
   Truck,
   Settings,
   Eye,
+  EyeOff,
   KeyRound,
   ShieldCheck,
   Lock
@@ -87,6 +88,7 @@ export default function KitchenDashboard() {
   const ORDERS_VISIBLE_PAGE_SIZE = 10;
 
   const [apiKey, setApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState("orders");
@@ -1597,7 +1599,7 @@ ${receiverAddressSection}`;
                   <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600" />
                   <Input
                     id="api-key"
-                    type="password"
+                    type={showApiKey ? "text" : "password"}
                     placeholder="........................"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
@@ -1606,9 +1608,15 @@ ${receiverAddressSection}`;
                     disabled={loading}
                     autoComplete="current-password"
                   />
-                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
-                    <Eye className="h-5 w-5" />
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
+                    aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                    disabled={loading}
+                  >
+                    {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
                 </div>
               </div>
 
