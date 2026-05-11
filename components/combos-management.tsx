@@ -48,8 +48,15 @@ interface Drink {
   available?: boolean;
 }
 
+interface Product {
+  id: number;
+  display_name: string;
+  base_price?: number;
+  available?: boolean;
+}
+
 interface ComboItemIn {
-  item_type: "preset" | "ingredient";
+  item_type: "preset" | "ingredient" | "drink" | "product";
   item_id: number;
   quantity: number;
   display_label: string;
@@ -126,6 +133,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [drinks, setDrinks] = useState<Drink[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -134,7 +142,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
   const [form, setForm] = useState(emptyForm());
 
   // Item picker state
-  const [pickerType, setPickerType] = useState<"preset" | "ingredient" | "drink">("preset");
+  const [pickerType, setPickerType] = useState<"preset" | "ingredient" | "drink" | "product">("preset");
   const [pickerSearch, setPickerSearch] = useState("");
 
   // ---------------------------------------------------------------------------
@@ -152,22 +160,25 @@ export function CombosManagement({ token }: CombosManagementProps) {
     if (!token) return;
     setLoading(true);
     try {
-      const [combosRes, presetsRes, ingredientsRes, drinksRes] = await Promise.all([
+      const [combosRes, presetsRes, ingredientsRes, drinksRes, productsRes] = await Promise.all([
         fetch("/api/combos", { headers: headers() }),
         fetch("/api/presets", { headers: headers() }),
         fetch("/api/ingredients?addons_only=false", { headers: headers() }),
         fetch("/api/drinks", { headers: headers() }),
+        fetch("/api/products", { headers: headers() }),
       ]);
-      const [combosData, presetsData, ingredientsData, drinksData] = await Promise.all([
+      const [combosData, presetsData, ingredientsData, drinksData, productsData] = await Promise.all([
         combosRes.json(),
         presetsRes.json(),
         ingredientsRes.json(),
         drinksRes.json(),
+        productsRes.json(),
       ]);
       setCombos(Array.isArray(combosData) ? combosData : []);
       setPresets(Array.isArray(presetsData) ? presetsData : []);
       setIngredients(Array.isArray(ingredientsData) ? ingredientsData : []);
       setDrinks(Array.isArray(drinksData) ? drinksData : []);
+      setProducts(Array.isArray(productsData) ? productsData : []);
     } catch (e) {
       toast({ title: "Failed to load combos", variant: "destructive" });
     } finally {
@@ -304,14 +315,17 @@ export function CombosManagement({ token }: CombosManagementProps) {
       ? drinks.filter((d) =>
           d.display_name.toLowerCase().includes(pickerSearch.toLowerCase())
         )
+      : pickerType === "product"
+      ? products.filter((p) =>
+          p.display_name.toLowerCase().includes(pickerSearch.toLowerCase())
+        )
       : ingredients.filter((i) =>
           i.display_name.toLowerCase().includes(pickerSearch.toLowerCase())
         );
 
-  function addItem(type: "preset" | "ingredient" | "drink", id: number, name: string, price: number) {
-    const backendType: "preset" | "ingredient" = type === "drink" ? "ingredient" : type;
+  function addItem(type: "preset" | "ingredient" | "drink" | "product", id: number, name: string) {
     const alreadyIdx = form.items.findIndex(
-      (it) => it.item_type === backendType && it.item_id === id
+      (it) => it.item_type === type && it.item_id === id
     );
     if (alreadyIdx >= 0) {
       // increment quantity
@@ -323,7 +337,7 @@ export function CombosManagement({ token }: CombosManagementProps) {
       setForm((f) => ({ ...f, items: updated }));
     } else {
       const newItem: ComboItemIn = {
-        item_type: backendType,
+        item_type: type,
         item_id: id,
         quantity: 1,
         display_label: name,
@@ -349,6 +363,12 @@ export function CombosManagement({ token }: CombosManagementProps) {
     if (it.item_type === "preset") {
       const p = presets.find((pr) => pr.id === it.item_id);
       return sum + (p?.preset_price ?? p?.product_base_price ?? 0) * it.quantity;
+    } else if (it.item_type === "drink") {
+      const d = drinks.find((dr) => dr.id === it.item_id);
+      return sum + (d?.price ?? 0) * it.quantity;
+    } else if (it.item_type === "product") {
+      const p = products.find((pr) => pr.id === it.item_id);
+      return sum + (p?.base_price ?? 0) * it.quantity;
     } else {
       const i = ingredients.find((ig) => ig.id === it.item_id);
       return sum + (i?.price ?? 0) * it.quantity;
@@ -610,7 +630,11 @@ export function CombosManagement({ token }: CombosManagementProps) {
                     const name =
                       it.item_type === "preset"
                         ? presets.find((p) => p.id === it.item_id)?.display_name ?? `Preset #${it.item_id}`
-                          : drinks.find((d) => d.id === it.item_id)?.display_name ??
+                        : it.item_type === "drink"
+                        ? drinks.find((d) => d.id === it.item_id)?.display_name ?? `Drink #${it.item_id}`
+                        : it.item_type === "product"
+                        ? products.find((p) => p.id === it.item_id)?.display_name ?? `Product #${it.item_id}`
+                        :
                             ingredients.find((i) => i.id === it.item_id)?.display_name ??
                             `Addon #${it.item_id}`;
                     return (
@@ -684,6 +708,16 @@ export function CombosManagement({ token }: CombosManagementProps) {
                 >
                   Drinks
                 </button>
+                <button
+                  className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                    pickerType === "product"
+                      ? "bg-orange-500 text-white border-orange-500"
+                      : "bg-white text-gray-600 border-gray-300 hover:border-orange-300"
+                  }`}
+                  onClick={() => setPickerType("product")}
+                >
+                  Child Products
+                </button>
               </div>
               <Input
                 placeholder={`Search ${pickerType}s…`}
@@ -696,12 +730,16 @@ export function CombosManagement({ token }: CombosManagementProps) {
                   const price =
                     pickerType === "preset"
                       ? ((item as Preset).preset_price ?? (item as Preset).product_base_price ?? 0)
-                      : ((item as Ingredient | Drink).price ?? 0);
+                      : pickerType === "drink"
+                      ? ((item as Drink).price ?? 0)
+                      : pickerType === "product"
+                      ? ((item as Product).base_price ?? 0)
+                      : ((item as Ingredient).price ?? 0);
                   return (
                     <button
                       key={item.id}
                       className="w-full flex justify-between items-center text-sm px-2 py-1 rounded hover:bg-orange-50 hover:text-orange-700"
-                      onClick={() => addItem(pickerType, item.id, item.display_name, price)}
+                      onClick={() => addItem(pickerType, item.id, item.display_name)}
                     >
                       <span>{item.display_name}</span>
                       <span className="text-xs text-gray-400">{formatRWF(price)}</span>
