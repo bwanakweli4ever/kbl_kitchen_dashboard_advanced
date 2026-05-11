@@ -1943,6 +1943,13 @@ ${receiverAddressSection}`;
                           <div className="text-right">
                               {(() => {
                                 const pricing = getVerifiedPricingBreakdown(order);
+                                const storedCouponDiscount = Number(order.coupon_discount_amount ?? 0);
+                                const appliedCouponAmount =
+                                  Number.isFinite(storedCouponDiscount) && storedCouponDiscount > 0
+                                    ? storedCouponDiscount
+                                    : order.coupon_code && pricing.loyaltyDiscount > 0
+                                      ? pricing.loyaltyDiscount
+                                      : 0;
                                 return (
                                   <>
                               <div className="text-lg sm:text-xl md:text-2xl font-bold text-green-600">
@@ -1953,8 +1960,13 @@ ${receiverAddressSection}`;
                                 <div className="mt-2 flex justify-end">
                                   <Badge className="bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 text-[11px] sm:text-xs font-semibold">
                                     <span className="mr-1">🏷️</span>
-                                    Coupon: {order.coupon_code}
+                                    Applied Coupon: {order.coupon_code}
                                   </Badge>
+                                </div>
+                              )}
+                              {appliedCouponAmount > 0 && (
+                                <div className="text-[11px] sm:text-xs font-semibold text-amber-800 mt-1">
+                                  Applied Coupon Discount: -{formatCurrency(appliedCouponAmount)}
                                 </div>
                               )}
                               {pricing.hasVerifiedDiscount && (
@@ -2102,11 +2114,16 @@ ${receiverAddressSection}`;
                           <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg">
                             <span className="text-base">🏷️</span>
                             <div className="flex-1 min-w-0">
-                              <span className="font-semibold text-amber-900 text-sm">Coupon: </span>
+                              <span className="font-semibold text-amber-900 text-sm">Applied Coupon: </span>
                               <span className="font-mono font-bold text-amber-800 tracking-wider text-sm">{order.coupon_code}</span>
                               {order.coupon_discount_amount != null && order.coupon_discount_amount > 0 && (
                                 <span className="ml-2 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-1.5 py-0.5">
                                   -{order.coupon_discount_amount.toLocaleString()} RWF off
+                                </span>
+                              )}
+                              {!(order.coupon_discount_amount != null && order.coupon_discount_amount > 0) && getOrderPricingBreakdown(order).loyaltyDiscount > 0 && (
+                                <span className="ml-2 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-1.5 py-0.5">
+                                  -{Math.round(getOrderPricingBreakdown(order).loyaltyDiscount).toLocaleString()} RWF off
                                 </span>
                               )}
                               {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (
@@ -2135,12 +2152,13 @@ ${receiverAddressSection}`;
                               }
                               onClick={() => handleVerifyCouponLive(order)}
                               className="h-7 px-2 text-xs border-amber-400 text-amber-800 hover:bg-amber-100"
+                              title="Validate coupon against api.fidloy.com"
                             >
                               {couponVerifyByOrder[order.id]?.status === "loading"
                                 ? "Verifying..."
                                 : ((couponVerifyByOrder[order.id]?.cooldownUntil || 0) > Date.now())
                                   ? `Wait ${Math.max(1, Math.ceil(((couponVerifyByOrder[order.id]?.cooldownUntil || 0) - Date.now()) / 1000))}s`
-                                  : "Verify Live"}
+                                  : "Validate (Fidloy)"}
                             </Button>
                             {couponVerifyByOrder[order.id]?.status === "valid" ? (
                               <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-full px-2 py-0.5 flex-shrink-0">✓ Verified Live</span>
