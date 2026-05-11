@@ -23,6 +23,36 @@ async function proxyToBackend(
   })
 }
 
+async function forwardUpstream(upstream: Response): Promise<NextResponse> {
+  if (upstream.status === 204) {
+    return new NextResponse(null, { status: 204 })
+  }
+
+  const contentType = upstream.headers.get("content-type") || ""
+  const isJson = contentType.includes("application/json")
+
+  if (isJson) {
+    try {
+      const data = await upstream.json()
+      return NextResponse.json(data, { status: upstream.status })
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON response from backend" },
+        { status: 502 },
+      )
+    }
+  }
+
+  const text = await upstream.text().catch(() => "")
+  return NextResponse.json(
+    {
+      error: text || `Backend responded with status ${upstream.status}`,
+      status: upstream.status,
+    },
+    { status: upstream.status },
+  )
+}
+
 // GET /api/combos  or  GET /api/combos/[id] (passed via query param __id)
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
@@ -41,8 +71,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const upstream = await proxyToBackend("GET", path, request.headers.get("authorization"))
-    const data = await upstream.json()
-    return NextResponse.json(data, { status: upstream.status })
+    return await forwardUpstream(upstream)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -56,8 +85,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const upstream = await proxyToBackend("POST", "/api/combos", authorization, body)
-    const data = await upstream.json()
-    return NextResponse.json(data, { status: upstream.status })
+    return await forwardUpstream(upstream)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -74,8 +102,7 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
     const upstream = await proxyToBackend("PUT", `/api/combos/${id}`, authorization, body)
-    const data = await upstream.json()
-    return NextResponse.json(data, { status: upstream.status })
+    return await forwardUpstream(upstream)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -91,9 +118,7 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const upstream = await proxyToBackend("DELETE", `/api/combos/${id}`, authorization)
-    if (upstream.status === 204) return new NextResponse(null, { status: 204 })
-    const data = await upstream.json()
-    return NextResponse.json(data, { status: upstream.status })
+    return await forwardUpstream(upstream)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
