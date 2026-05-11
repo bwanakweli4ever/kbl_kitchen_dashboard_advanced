@@ -35,7 +35,28 @@ self.addEventListener('fetch', (event) => {
   const isApiRequest = requestUrl.pathname.startsWith('/api/');
 
   if (isNavigationRequest || isNextAsset || isApiRequest) {
-    event.respondWith(fetch(request));
+    event.respondWith(
+      fetch(request).catch(async () => {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+
+        if (isApiRequest) {
+          return new Response(JSON.stringify({ error: 'Network unavailable' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (isNavigationRequest) {
+          return new Response('Offline', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain' },
+          });
+        }
+
+        return Response.error();
+      })
+    );
     return;
   }
 
@@ -45,25 +66,30 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse;
       }
 
-      return fetch(request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
-        }
+      return fetch(request)
+        .then((networkResponse) => {
+          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+            return networkResponse;
+          }
 
-        // Only cache HTTP/HTTPS URLs - skip extension schemes
-        if (!requestUrl.protocol.startsWith('http')) {
-          return networkResponse;
-        }
+          // Only cache HTTP/HTTPS URLs - skip extension schemes
+          if (!requestUrl.protocol.startsWith('http')) {
+            return networkResponse;
+          }
 
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseToCache).catch((err) => {
-            console.warn('Cache.put failed:', err.message);
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseToCache).catch((err) => {
+              console.warn('Cache.put failed:', err.message);
+            });
           });
-        });
 
-        return networkResponse;
-      });
+          return networkResponse;
+        })
+        .catch(async () => {
+          const fallback = await caches.match(request);
+          return fallback || Response.error();
+        });
     })
   );
 });
