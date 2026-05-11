@@ -11,30 +11,51 @@ self.addEventListener("activate", () => self.clients.claim());
 fetch("/api/config/firebase")
   .then((r) => r.json())
   .then(({ firebaseConfig }) => {
-    if (!firebaseConfig?.projectId) return;
-    self.firebase.initializeApp(firebaseConfig);
-    const messaging = self.firebase.messaging();
-    messaging.onBackgroundMessage((payload) => {
-      const title = payload.notification?.title ?? payload.data?.title ?? "New order";
-      const options = {
-        body: payload.notification?.body ?? payload.data?.body ?? "Check the kitchen",
-        icon: "/logo.png",
-        badge: "/logo.png",
-        tag: "kitchen-push",
-        requireInteraction: true,
-        data: payload.data ?? {},
-      };
-      return self.registration.showNotification(title, options);
-    });
+    if (!firebaseConfig?.projectId) {
+      console.warn("FCM: Missing firebaseConfig.projectId");
+      return;
+    }
+    try {
+      self.firebase.initializeApp(firebaseConfig);
+      const messaging = self.firebase.messaging();
+      messaging.onBackgroundMessage((payload) => {
+        try {
+          if (!payload) {
+            console.warn("FCM: Received null or undefined payload");
+            return Promise.resolve();
+          }
+          
+          const title = payload.notification?.title ?? payload.data?.title ?? "New order";
+          const body = payload.notification?.body ?? payload.data?.body ?? "Check the kitchen";
+          
+          const options = {
+            body,
+            icon: "/logo.png",
+            badge: "/logo.png",
+            tag: "kitchen-push",
+            requireInteraction: true,
+            data: payload.data ?? {},
+          };
+          return self.registration.showNotification(title, options);
+        } catch (error) {
+          console.error("FCM: Failed to show notification:", error);
+          return Promise.resolve();
+        }
+      });
+    } catch (error) {
+      console.error("FCM: Failed to initialize Firebase:", error);
+    }
   })
-  .catch((e) => console.error("FCM sw config failed", e));
+  .catch((e) => console.error("FCM config request failed:", e));
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((clientList) => {
       for (const client of clientList) {
-        if (client.focus) return client.focus();
+        if (client.url && client.url.includes(self.location.host) && client.focus) {
+          return client.focus();
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow("/");
     })

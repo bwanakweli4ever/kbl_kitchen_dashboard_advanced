@@ -50,9 +50,16 @@ self.addEventListener('fetch', (event) => {
           return networkResponse;
         }
 
+        // Only cache HTTP/HTTPS URLs - skip extension schemes
+        if (!requestUrl.protocol.startsWith('http')) {
+          return networkResponse;
+        }
+
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseToCache);
+          cache.put(request, responseToCache).catch((err) => {
+            console.warn('Cache.put failed:', err.message);
+          });
         });
 
         return networkResponse;

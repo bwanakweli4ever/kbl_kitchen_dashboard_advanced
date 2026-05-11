@@ -27,7 +27,17 @@ async function proxyToBackend(
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const id = searchParams.get("__id")
-  const path = id ? `/api/combos/${id}` : `/api/combos?${searchParams.toString().replace(/&?__id=[^&]*/g, "")}`
+  
+  let path: string
+  if (id) {
+    path = `/api/combos/${id}`
+  } else {
+    // Remove __id parameter before passing to backend
+    const params = new URLSearchParams(searchParams)
+    params.delete("__id")
+    const queryString = params.toString()
+    path = queryString ? `/api/combos?${queryString}` : "/api/combos"
+  }
 
   try {
     const upstream = await proxyToBackend("GET", path, request.headers.get("authorization"))

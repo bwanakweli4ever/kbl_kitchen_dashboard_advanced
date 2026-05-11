@@ -49,7 +49,7 @@ interface Drink {
 }
 
 interface ComboItemIn {
-  item_type: "preset" | "ingredient" | "drink";
+  item_type: "preset" | "ingredient";
   item_id: number;
   quantity: number;
   display_label: string;
@@ -90,8 +90,10 @@ function slugify(s: string) {
   return s
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_")
+      // Map "drink" to "ingredient" for backend compatibility (backend only accepts preset/ingredient)
+      const backendType: "preset" | "ingredient" = type === "drink" ? "ingredient" : type;
     .replace(/^_+|_+$/g, "");
-}
+        (it) => it.item_type === backendType && it.item_id === id
 
 function getImageUrl(imageUrl?: string | null) {
   if (!imageUrl) return "";
@@ -103,7 +105,7 @@ function getImageUrl(imageUrl?: string | null) {
     return `${imageBaseUrl}${imageUrl}`;
   }
   return imageUrl;
-}
+          item_type: backendType,
 
 const emptyForm = () => ({
   name: "",
@@ -348,9 +350,6 @@ export function CombosManagement({ token }: CombosManagementProps) {
     if (it.item_type === "preset") {
       const p = presets.find((pr) => pr.id === it.item_id);
       return sum + (p?.preset_price ?? p?.product_base_price ?? 0) * it.quantity;
-    } else if (it.item_type === "drink") {
-      const d = drinks.find((dr) => dr.id === it.item_id);
-      return sum + (d?.price ?? 0) * it.quantity;
     } else {
       const i = ingredients.find((ig) => ig.id === it.item_id);
       return sum + (i?.price ?? 0) * it.quantity;
@@ -612,9 +611,9 @@ export function CombosManagement({ token }: CombosManagementProps) {
                     const name =
                       it.item_type === "preset"
                         ? presets.find((p) => p.id === it.item_id)?.display_name ?? `Preset #${it.item_id}`
-                        : it.item_type === "drink"
-                        ? drinks.find((d) => d.id === it.item_id)?.display_name ?? `Drink #${it.item_id}`
-                        : ingredients.find((i) => i.id === it.item_id)?.display_name ?? `Ingredient #${it.item_id}`;
+                          : drinks.find((d) => d.id === it.item_id)?.display_name ??
+                            ingredients.find((i) => i.id === it.item_id)?.display_name ??
+                            `Addon #${it.item_id}`;
                     return (
                       <li
                         key={idx}
