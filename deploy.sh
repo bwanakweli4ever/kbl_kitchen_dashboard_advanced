@@ -30,8 +30,13 @@ npm install --legacy-peer-deps
 
 echo "🔨 Building Next.js application..."
 
-# Build the application
-npm run build
+# Build the application using the local Next.js binary explicitly.
+if [ ! -x ./node_modules/.bin/next ]; then
+	echo "❌ next binary not found in node_modules/.bin"
+	exit 1
+fi
+
+./node_modules/.bin/next build
 
 echo "✅ Deployment completed successfully!"
 echo ""
