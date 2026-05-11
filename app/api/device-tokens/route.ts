@@ -6,7 +6,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    const timeoutMs = Math.max(config.api.timeout, 30000)
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
       const response = await fetch(`${config.api.baseUrl}/api/device-tokens`, {

@@ -4,6 +4,7 @@ import { config } from "@/lib/config"
 export const runtime = "nodejs"
 
 const BACKEND_URL = config.api.baseUrl.replace(/\/$/, "") // e.g. https://backend.kblbites.com
+const PROXY_TIMEOUT_MS = Math.max(config.api.timeout, 30000)
 
 async function proxyToBackend(
   method: string,
@@ -19,7 +20,7 @@ async function proxyToBackend(
     method,
     headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
   })
 }
 
@@ -74,7 +75,8 @@ export async function GET(request: NextRequest) {
     return await forwardUpstream(upstream)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const isTimeout = err instanceof Error && err.name === "TimeoutError"
+    return NextResponse.json({ error: msg }, { status: isTimeout ? 504 : 500 })
   }
 }
 
@@ -88,7 +90,8 @@ export async function POST(request: NextRequest) {
     return await forwardUpstream(upstream)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const isTimeout = err instanceof Error && err.name === "TimeoutError"
+    return NextResponse.json({ error: msg }, { status: isTimeout ? 504 : 500 })
   }
 }
 
@@ -105,7 +108,8 @@ export async function PUT(request: NextRequest) {
     return await forwardUpstream(upstream)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const isTimeout = err instanceof Error && err.name === "TimeoutError"
+    return NextResponse.json({ error: msg }, { status: isTimeout ? 504 : 500 })
   }
 }
 
@@ -121,6 +125,7 @@ export async function DELETE(request: NextRequest) {
     return await forwardUpstream(upstream)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const isTimeout = err instanceof Error && err.name === "TimeoutError"
+    return NextResponse.json({ error: msg }, { status: isTimeout ? 504 : 500 })
   }
 }

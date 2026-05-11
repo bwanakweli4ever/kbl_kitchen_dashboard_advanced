@@ -4,7 +4,7 @@ export const config = {
   api: {
     baseUrl: process.env.NEXT_PUBLIC_API_URL || process.env.WHATSAPP_API_URL || "https://backend.kblbites.com",
     // For local testing set NEXT_PUBLIC_API_URL=http://localhost:8000
-    timeout: 15000, // 15 seconds
+    timeout: 30000, // 30 seconds
     retryAttempts: 3,
   },
   
