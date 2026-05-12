@@ -330,6 +330,7 @@ export default function KitchenDashboard() {
         body: JSON.stringify({
           code: order.coupon_code,
           amount,
+          transaction_id: order.id,
           phone: order.customer_phone_number || order.wa_id || undefined,
           email: order.customer_email || undefined,
         }),
@@ -337,6 +338,7 @@ export default function KitchenDashboard() {
 
       const data = await response.json().catch(() => ({}));
       const isValid = response.ok && (data?.verified === true || data?.valid === true);
+      const isRedeemed = data?.redeemed === true;
       const verifiedDiscount = Number(data?.discount_amount || 0);
       const discountPercentage = Number(data?.discount_percentage || 0);
       const templateName = typeof data?.template_name === "string" ? data.template_name : undefined;
@@ -355,17 +357,18 @@ export default function KitchenDashboard() {
         return;
       }
 
-      if (isValid && verifiedDiscount > 0) {
+      if (isValid && verifiedDiscount > 0 && isRedeemed) {
         setCouponVerifyByOrder((prev) => ({
           ...prev,
           [order.id]: { status: "valid", verifiedDiscount, discount_percentage: discountPercentage, template_name: templateName, remaining_uses: remainingUses, checkedAt: now },
         }));
       } else {
+        const redeemError = typeof data?.redeem_error === "string" ? data.redeem_error : undefined;
         setCouponVerifyByOrder((prev) => ({
           ...prev,
           [order.id]: {
             status: "invalid",
-            error: typeof data?.error === "string" ? data.error : "Coupon verification failed",
+            error: redeemError || (typeof data?.error === "string" ? data.error : "Coupon verification/redeem failed"),
             checkedAt: now,
           },
         }));
@@ -2140,7 +2143,7 @@ ${receiverAddressSection}`;
                                   : "Validate (Fidloy)"}
                             </Button>
                             {couponVerifyByOrder[order.id]?.status === "valid" ? (
-                              <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-full px-2 py-0.5 flex-shrink-0">✓ Verified Live</span>
+                              <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-full px-2 py-0.5 flex-shrink-0">✓ Verified + Redeemed</span>
                             ) : couponVerifyByOrder[order.id]?.status === "invalid" ? (
                               <span className="text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded-full px-2 py-0.5 flex-shrink-0">✗ Invalid</span>
                             ) : order.coupon_redeem_status === 'success' ? (

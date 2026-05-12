@@ -45,14 +45,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  let body: { code?: string; amount?: number; phone?: string; email?: string }
+  let body: {
+    code?: string
+    amount?: number
+    phone?: string
+    email?: string
+    transaction_id?: number
+    customer_id?: number
+  }
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { code, amount, phone, email } = body
+  const { code, amount, phone, email, transaction_id, customer_id } = body
 
   if (!code || typeof code !== "string" || !code.trim()) {
     return NextResponse.json({ error: "Coupon code is required" }, { status: 400 })
@@ -60,6 +67,13 @@ export async function POST(request: NextRequest) {
 
   if (!amount || typeof amount !== "number" || amount <= 0) {
     return NextResponse.json({ error: "A positive order amount is required" }, { status: 400 })
+  }
+
+  if (
+    transaction_id !== undefined &&
+    (typeof transaction_id !== "number" || !Number.isFinite(transaction_id) || transaction_id <= 0)
+  ) {
+    return NextResponse.json({ error: "transaction_id must be a positive number" }, { status: 400 })
   }
 
   const normalizedCode = code.trim().toUpperCase()
@@ -153,6 +167,54 @@ export async function POST(request: NextRequest) {
       couponType = "fixed"
     }
 
+    const shouldRedeem = Boolean(transaction_id && transaction_id > 0)
+    let redeemed = false
+    let redeemError: string | undefined
+    let redeemResult: Record<string, unknown> = {}
+
+    if (isValid && effectiveDiscount > 0 && shouldRedeem) {
+      try {
+        const redeemPayload: Record<string, unknown> = {
+          code: normalizedCode,
+          transaction_id,
+          amount,
+          validation_id: data.validation_id ?? undefined,
+        }
+        if (phone) redeemPayload.phone = (phone as string).trim()
+        if (email) redeemPayload.email = (email as string).trim()
+        if (typeof customer_id === "number" && Number.isFinite(customer_id) && customer_id > 0) {
+          redeemPayload.customer_id = customer_id
+        }
+
+        const redeemResponse = await fetch(`${backendUrl}/api/loyalty/points/coupons/redeem`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: authorization,
+          },
+          body: JSON.stringify(redeemPayload),
+          signal: AbortSignal.timeout(12000),
+        })
+
+        let redeemData: Record<string, unknown> = {}
+        try { redeemData = await redeemResponse.json() } catch { redeemData = {} }
+
+        if (!redeemResponse.ok) {
+          redeemError =
+            (redeemData as any)?.detail ||
+            (redeemData as any)?.error ||
+            (redeemData as any)?.message ||
+            `Redeem failed (HTTP ${redeemResponse.status})`
+        } else {
+          redeemed = true
+          redeemResult = redeemData
+        }
+      } catch (redeemErr: unknown) {
+        redeemError = redeemErr instanceof Error ? redeemErr.message : String(redeemErr)
+      }
+    }
+
     return NextResponse.json({
       verified: isValid && effectiveDiscount > 0,
       valid: isValid,
@@ -164,6 +226,9 @@ export async function POST(request: NextRequest) {
       template_name: couponTemplateName,
       remaining_uses: remainingUses,
       validation_id: data.validation_id ?? null,
+      redeemed,
+      redeem_error: redeemError,
+      redeem_result: redeemResult,
     })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

@@ -206,6 +206,7 @@ export function OrderDetailModal({
       const body: Record<string, unknown> = {
         code: displayCouponCode,
         amount: amount > 0 ? amount : 1,
+        transaction_id: order.id,
       }
       if (phone) body.phone = phone
       if (email) body.email = email
@@ -219,7 +220,7 @@ export function OrderDetailModal({
         body: JSON.stringify(body),
       })
       const data = await res.json()
-      if (data.verified) {
+      if (data.verified && data.redeemed === true) {
         setCouponVerifyStatus('valid')
         setCouponVerifyResult({
           discount_amount: data.discount_amount ?? 0,
@@ -234,7 +235,7 @@ export function OrderDetailModal({
           discount_percentage: 0,
           final_amount: amount,
           coupon_type: 'fixed',
-          error: data.error || 'Coupon is invalid or cannot be verified',
+          error: data.redeem_error || data.error || 'Coupon verification/redeem failed',
         })
       }
     } catch (err) {
@@ -925,7 +926,7 @@ export function OrderDetailModal({
                     <div className="mt-3 p-3 bg-green-100 rounded-lg border border-green-400 space-y-1">
                       <div className="flex items-center gap-2 font-bold text-green-800">
                         <ShieldCheck className="h-5 w-5" />
-                        Coupon VERIFIED on live server ✓
+                        Coupon VERIFIED and REDEEMED ✓
                       </div>
                       <div className="text-sm text-green-900">
                         Type: {couponVerifyResult.coupon_type === 'percentage' ? `Percentage (${couponVerifyResult.discount_percentage}%)` : 'Fixed amount'}
