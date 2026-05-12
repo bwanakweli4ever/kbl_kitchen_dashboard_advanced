@@ -79,6 +79,8 @@ export default function KitchenDashboard() {
     status: "idle" | "loading" | "valid" | "invalid";
     verifiedDiscount?: number;
     discount_percentage?: number;
+    template_name?: string;
+    remaining_uses?: number;
     error?: string;
     checkedAt?: number;
     cooldownUntil?: number;
@@ -337,6 +339,8 @@ export default function KitchenDashboard() {
       const isValid = response.ok && (data?.verified === true || data?.valid === true);
       const verifiedDiscount = Number(data?.discount_amount || 0);
       const discountPercentage = Number(data?.discount_percentage || 0);
+      const templateName = typeof data?.template_name === "string" ? data.template_name : undefined;
+      const remainingUses = data?.remaining_uses != null ? Number(data.remaining_uses) : undefined;
 
       if (response.status === 429) {
         setCouponVerifyByOrder((prev) => ({
@@ -354,7 +358,7 @@ export default function KitchenDashboard() {
       if (isValid && verifiedDiscount > 0) {
         setCouponVerifyByOrder((prev) => ({
           ...prev,
-          [order.id]: { status: "valid", verifiedDiscount, discount_percentage: discountPercentage, checkedAt: now },
+          [order.id]: { status: "valid", verifiedDiscount, discount_percentage: discountPercentage, template_name: templateName, remaining_uses: remainingUses, checkedAt: now },
         }));
       } else {
         setCouponVerifyByOrder((prev) => ({
@@ -2091,17 +2095,23 @@ ${receiverAddressSection}`;
                           <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg">
                             <span className="text-base">🏷️</span>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-semibold text-amber-900 text-sm">Coupon:</span>
                                 <span className="font-mono font-bold text-amber-800 tracking-wider text-sm">{order.coupon_code}</span>
                               </div>
+                              {couponVerifyByOrder[order.id]?.template_name && (
+                                <div className="mt-0.5 text-xs text-amber-700 italic">{couponVerifyByOrder[order.id].template_name}</div>
+                              )}
                               {couponVerifyByOrder[order.id]?.status === "valid" && (couponVerifyByOrder[order.id]?.verifiedDiscount || 0) > 0 && (() => {
                                 const verified = couponVerifyByOrder[order.id];
                                 const pct = verified?.discount_percentage || 0;
                                 return (
-                                  <div className="mt-1.5 text-xs font-semibold text-emerald-800">
-                                    <div>Discount: -{Math.round(verified.verifiedDiscount || 0).toLocaleString()} RWF ({Number(pct).toFixed(1)}%)</div>
-                                    <div className="mt-0.5 text-emerald-700">Final: {formatCurrency(Math.max(calculateOrderTotal(order) - Number(verified.verifiedDiscount || 0), 0))}</div>
+                                  <div className="mt-1.5 text-xs font-semibold text-emerald-800 space-y-0.5">
+                                    <div>Discount: -{Math.round(verified.verifiedDiscount || 0).toLocaleString()} RWF ({Number(pct).toFixed(0)}%)</div>
+                                    <div className="text-emerald-700">Final: {formatCurrency(Math.max(calculateOrderTotal(order) - Number(verified.verifiedDiscount || 0), 0))}</div>
+                                    {verified.remaining_uses != null && (
+                                      <div className="text-amber-600">Uses left: {verified.remaining_uses}</div>
+                                    )}
                                   </div>
                                 );
                               })()}
